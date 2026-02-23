@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Strategy Map</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <aside class="toolbar">
+      <button id="selectBtn" class="tool-btn" title="Select/Move">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
+          <path d="M13 13l6 6"/>
+        </svg>
+      </button>
+      <button id="drawBtn" class="tool-btn" title="Draw">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+          <path d="M2 2l7.586 7.586"/>
+        </svg>
+      </button>
+      <button id="eraseBtn" class="tool-btn" title="Erase">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M20 20H7L3 16c-.6-.6-.6-1.5 0-2.1l10-10c.6-.6 1.5-.6 2.1 0l6 6c.6.6.6 1.5 0 2.1L13 20"/>
+          <path d="M6 11l8 8"/>
+        </svg>
+      </button>
+      <div class="divider"></div>
+      <div class="size-control">
+        <label class="size-label">Size</label>
+        <input type="range" id="brushSize" min="1" max="30" value="4" class="size-slider" title="Brush/Erase Size">
+        <span id="sizeValue" class="size-value">4</span>
+      </div>
+      <div class="divider"></div>
+      <button id="clearBtn" class="tool-btn" title="Clear All">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18"/>
+          <path d="M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+          <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/>
+        </svg>
+      </button>
+      <button id="recenterBtn" class="tool-btn" title="Recenter Map">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M12 2v4"/>
+          <path d="M12 18v4"/>
+          <path d="M2 12h4"/>
+          <path d="M18 12h4"/>
+        </svg>
+      </button>
+      <div class="divider"></div>
+      <div class="marker-group">
+        <div class="marker blue" data-team="blue" data-role="top" data-index="0" draggable="true" title="Blue Top"></div>
+        <div class="marker blue" data-team="blue" data-role="jg" data-index="1" draggable="true" title="Blue Jungle"></div>
+        <div class="marker blue" data-team="blue" data-role="mid" data-index="2" draggable="true" title="Blue Mid"></div>
+        <div class="marker blue" data-team="blue" data-role="bot" data-index="3" draggable="true" title="Blue Bot"></div>
+        <div class="marker blue" data-team="blue" data-role="sup" data-index="4" draggable="true" title="Blue Support"></div>
+      </div>
+      <div class="marker-group">
+        <div class="marker red" data-team="red" data-role="top" data-index="0" draggable="true" title="Red Top"></div>
+        <div class="marker red" data-team="red" data-role="jg" data-index="1" draggable="true" title="Red Jungle"></div>
+        <div class="marker red" data-team="red" data-role="mid" data-index="2" draggable="true" title="Red Mid"></div>
+        <div class="marker red" data-team="red" data-role="bot" data-index="3" draggable="true" title="Red Bot"></div>
+        <div class="marker red" data-team="red" data-role="sup" data-index="4" draggable="true" title="Red Support"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="minion-group">
+        <div class="minion blue-minion" data-minion-team="blue" draggable="true" title="Blue Minion Wave"></div>
+        <div class="minion red-minion" data-minion-team="red" draggable="true" title="Red Minion Wave"></div>
+      </div>
+      <div class="divider"></div>
+      <div class="ward-group">
+        <div class="ward green-ward" data-ward-type="green" draggable="true" title="Green Ward">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="6"/>
+          </svg>
+        </div>
+        <div class="ward pink-ward" data-ward-type="pink" draggable="true" title="Pink Ward">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="6"/>
+          </svg>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="size-control">
+        <label class="size-label">Marker</label>
+        <input type="range" id="markerSize" min="12" max="40" value="16" class="size-slider" title="Marker Size">
+        <span id="markerSizeValue" class="size-value">16</span>
+      </div>
+    </aside>
+
+    <main class="canvas-wrap">
+      <canvas id="strategyCanvas"></canvas>
+    </main>
+
+    <aside class="right-panel">
+      <button id="hamburgerBtn" class="hamburger-btn" title="Toggle Panel">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 12h18"/>
+          <path d="M3 6h18"/>
+          <path d="M3 18h18"/>
+        </svg>
+      </button>
+      <div class="panel-content">
+        <!-- Draft Select -->
+        <div class="draft-section">
+          <h3 class="draft-title blue-title">Blue Team</h3>
+          <div class="draft-slots" data-team="blue">
+            <div class="draft-slot" data-role="top" data-team="blue">
+              <span class="role-name">TOP</span>
+              <div class="role-icon" data-role="top" data-team="blue"></div>
+            </div>
+            <div class="draft-slot" data-role="jg" data-team="blue">
+              <span class="role-name">JG</span>
+              <div class="role-icon" data-role="jg" data-team="blue"></div>
+            </div>
+            <div class="draft-slot" data-role="mid" data-team="blue">
+              <span class="role-name">MID</span>
+              <div class="role-icon" data-role="mid" data-team="blue"></div>
+            </div>
+            <div class="draft-slot" data-role="bot" data-team="blue">
+              <span class="role-name">BOT</span>
+              <div class="role-icon" data-role="bot" data-team="blue"></div>
+            </div>
+            <div class="draft-slot" data-role="sup" data-team="blue">
+              <span class="role-name">SUP</span>
+              <div class="role-icon" data-role="sup" data-team="blue"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="draft-section">
+          <h3 class="draft-title red-title">Red Team</h3>
+          <div class="draft-slots" data-team="red">
+            <div class="draft-slot" data-role="top" data-team="red">
+              <span class="role-name">TOP</span>
+              <div class="role-icon" data-role="top" data-team="red"></div>
+            </div>
+            <div class="draft-slot" data-role="jg" data-team="red">
+              <span class="role-name">JG</span>
+              <div class="role-icon" data-role="jg" data-team="red"></div>
+            </div>
+            <div class="draft-slot" data-role="mid" data-team="red">
+              <span class="role-name">MID</span>
+              <div class="role-icon" data-role="mid" data-team="red"></div>
+            </div>
+            <div class="draft-slot" data-role="bot" data-team="red">
+              <span class="role-name">BOT</span>
+              <div class="role-icon" data-role="bot" data-team="red"></div>
+            </div>
+            <div class="draft-slot" data-role="sup" data-team="red">
+              <span class="role-name">SUP</span>
+              <div class="role-icon" data-role="sup" data-team="red"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="divider-horizontal"></div>
+
+        <!-- Champion Grid -->
+        <div class="panel-section">
+          <input type="text" id="championSearch" class="champion-search" placeholder="Search champions...">
+          <div id="championGrid" class="champion-grid">
+            <!-- Champions loaded dynamically -->
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <script src="vendor/fabric.min.js"></script>
+    <script src="app.js?v=29"></script>
+  </body>
+</html>
