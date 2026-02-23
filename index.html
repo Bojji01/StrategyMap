@@ -8,20 +8,20 @@
   </head>
   <body>
     <aside class="toolbar">
-      <button id="selectBtn" class="tool-btn" title="Select/Move">
+      <button id="selectBtn" class="tool-btn" title="Select/Move (A)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/>
           <path d="M13 13l6 6"/>
         </svg>
       </button>
-      <button id="drawBtn" class="tool-btn" title="Draw">
+      <button id="drawBtn" class="tool-btn" title="Draw (D)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M12 19l7-7 3 3-7 7-3-3z"/>
           <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
           <path d="M2 2l7.586 7.586"/>
         </svg>
       </button>
-      <button id="eraseBtn" class="tool-btn" title="Erase">
+      <button id="eraseBtn" class="tool-btn" title="Erase (E)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20 20H7L3 16c-.6-.6-.6-1.5 0-2.1l10-10c.6-.6 1.5-.6 2.1 0l6 6c.6.6.6 1.5 0 2.1L13 20"/>
           <path d="M6 11l8 8"/>
@@ -169,7 +169,15 @@
       </div>
     </aside>
 
+    <!-- Shortcuts Hint -->
+    <div id="shortcutsHint" class="shortcuts-hint">
+      <div class="shortcuts-title">Keyboard Shortcuts</div>
+      <div class="shortcut-item"><span class="shortcut-key">A</span> Select/Move</div>
+      <div class="shortcut-item"><span class="shortcut-key">D</span> Draw</div>
+      <div class="shortcut-item"><span class="shortcut-key">E</span> Erase</div>
+    </div>
+
     <script src="vendor/fabric.min.js"></script>
-    <script src="app.js?v=29"></script>
+    <script src="app.js?v=30"></script>
   </body>
 </html>

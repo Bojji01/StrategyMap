@@ -268,6 +268,48 @@
     setupZoom();
     setupPan();
     setupRightPanel();
+    setupKeyboardShortcuts();
+    setupShortcutsHint();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Keyboard Shortcuts
+  // ─────────────────────────────────────────────────────────────
+
+  function setupKeyboardShortcuts() {
+    document.addEventListener('keydown', function(e) {
+      // Ignore if user is typing in an input field
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      switch (e.key.toLowerCase()) {
+        case 'a':
+          setMode('select');
+          break;
+        case 'd':
+          setMode('draw');
+          break;
+        case 'e':
+          setMode('erase');
+          break;
+      }
+    });
+  }
+
+  function setupShortcutsHint() {
+    const shortcutsHint = document.getElementById('shortcutsHint');
+    if (!shortcutsHint) return;
+    
+    // Hide after 1 minute (60000ms)
+    setTimeout(() => {
+      shortcutsHint.classList.add('hidden');
+    }, 60000);
+    
+    // Also hide on any keyboard shortcut use
+    document.addEventListener('keydown', function(e) {
+      if (['a', 'd', 'e'].includes(e.key.toLowerCase())) {
+        shortcutsHint.classList.add('hidden');
+      }
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
