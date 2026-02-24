@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Strategy Map</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=7" />
   </head>
   <body>
     <aside class="toolbar">
@@ -14,13 +14,23 @@
           <path d="M13 13l6 6"/>
         </svg>
       </button>
-      <button id="drawBtn" class="tool-btn" title="Draw (D)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 19l7-7 3 3-7 7-3-3z"/>
-          <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
-          <path d="M2 2l7.586 7.586"/>
-        </svg>
-      </button>
+      <div class="draw-btn-wrapper">
+        <button id="drawBtn" class="tool-btn" title="Draw (D)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 19l7-7 3 3-7 7-3-3z"/>
+            <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
+            <path d="M2 2l7.586 7.586"/>
+          </svg>
+          <span id="colorIndicator" class="color-indicator"></span>
+        </button>
+        <div id="colorPicker" class="color-picker">
+          <div class="color-option" data-color="#ef4444" title="Red"></div>
+          <div class="color-option" data-color="#f97316" title="Orange"></div>
+          <div class="color-option" data-color="#3b82f6" title="Blue"></div>
+          <div class="color-option" data-color="#ffffff" title="White"></div>
+          <div class="color-option" data-color="#eab308" title="Yellow"></div>
+        </div>
+      </div>
       <button id="eraseBtn" class="tool-btn" title="Erase (E)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M20 20H7L3 16c-.6-.6-.6-1.5 0-2.1l10-10c.6-.6 1.5-.6 2.1 0l6 6c.6.6.6 1.5 0 2.1L13 20"/>
@@ -171,13 +181,15 @@
 
     <!-- Shortcuts Hint -->
     <div id="shortcutsHint" class="shortcuts-hint">
-      <div class="shortcuts-title">Keyboard Shortcuts</div>
+      <div class="shortcuts-title">Controls</div>
       <div class="shortcut-item"><span class="shortcut-key">A</span> Select/Move</div>
       <div class="shortcut-item"><span class="shortcut-key">D</span> Draw</div>
       <div class="shortcut-item"><span class="shortcut-key">E</span> Erase</div>
+      <div class="shortcut-item"><span class="shortcut-key mouse-icon">🖱</span> Pan Map</div>
+      <div class="shortcut-item"><span class="shortcut-key scroll-icon">⇅</span> Zoom</div>
     </div>
 
     <script src="vendor/fabric.min.js"></script>
-    <script src="app.js?v=30"></script>
+    <script src="app.js?v=36"></script>
   </body>
 </html>

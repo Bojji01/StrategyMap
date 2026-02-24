@@ -29,6 +29,9 @@
   const championSearch = document.getElementById('championSearch');
   const markerSizeSlider = document.getElementById('markerSize');
   const markerSizeValue = document.getElementById('markerSizeValue');
+  const colorPicker = document.getElementById('colorPicker');
+  const colorOptions = document.querySelectorAll('.color-option');
+  const colorIndicator = document.getElementById('colorIndicator');
 
   // Data Dragon config
   const DDRAGON_VERSION = '14.24.1';
@@ -45,6 +48,7 @@
   let bgImage = null;
   let currentMode = 'select'; // 'select', 'draw', or 'erase'
   let currentBrushSize = 4;
+  let currentBrushColor = '#ef4444'; // Default red
   let markerRadius = 16; // Current marker radius
   let champions = []; // All champions data
   let selectedToolbarMarker = null; // Currently selected marker for champion assignment
@@ -105,6 +109,11 @@
       // Set up tools
       setupTools();
       setMode('select');
+      
+      // Initialize color indicator
+      if (colorIndicator) {
+        colorIndicator.style.background = currentBrushColor;
+      }
 
       console.log('Map ready');
     };
@@ -139,7 +148,7 @@
     } else if (mode === 'draw') {
       canvas.isDrawingMode = true;
       canvas.selection = false;
-      canvas.freeDrawingBrush.color = '#ef4444';
+      canvas.freeDrawingBrush.color = currentBrushColor;
       canvas.freeDrawingBrush.width = currentBrushSize;
       canvas.defaultCursor = 'crosshair';
       canvas.hoverCursor = 'crosshair';
@@ -244,11 +253,49 @@
   }
 
   function setupTools() {
-    selectBtn.addEventListener('click', () => setMode('select'));
-    drawBtn.addEventListener('click', () => setMode('draw'));
-    eraseBtn.addEventListener('click', () => setMode('erase'));
+    selectBtn.addEventListener('click', () => {
+      hideColorPicker();
+      setMode('select');
+    });
+    
+    // Draw button: toggle color picker if already in draw mode
+    drawBtn.addEventListener('click', () => {
+      if (currentMode === 'draw') {
+        toggleColorPicker();
+      } else {
+        hideColorPicker();
+        setMode('draw');
+      }
+    });
+    
+    eraseBtn.addEventListener('click', () => {
+      hideColorPicker();
+      setMode('erase');
+    });
     clearBtn.addEventListener('click', clearDrawings);
     recenterBtn.addEventListener('click', recenterMap);
+    
+    // Color picker options
+    colorOptions.forEach(option => {
+      const color = option.getAttribute('data-color');
+      // Set initial selected state
+      if (color === currentBrushColor) {
+        option.classList.add('selected');
+      }
+      
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setBrushColor(color);
+        hideColorPicker();
+      });
+    });
+    
+    // Close color picker when clicking elsewhere
+    document.addEventListener('click', (e) => {
+      if (!colorPicker.contains(e.target) && e.target !== drawBtn && !drawBtn.contains(e.target)) {
+        hideColorPicker();
+      }
+    });
     
     // Brush size slider
     brushSizeSlider.addEventListener('input', function () {
@@ -271,6 +318,44 @@
     setupKeyboardShortcuts();
     setupShortcutsHint();
   }
+  
+  // ─────────────────────────────────────────────────────────────
+  // Color Picker Functions
+  // ─────────────────────────────────────────────────────────────
+  
+  function toggleColorPicker() {
+    const isVisible = colorPicker.classList.toggle('visible');
+    
+    if (isVisible) {
+      // Position the color picker next to the draw button
+      const btnRect = drawBtn.getBoundingClientRect();
+      colorPicker.style.left = (btnRect.right + 8) + 'px';
+      colorPicker.style.top = btnRect.top + 'px';
+    }
+  }
+  
+  function hideColorPicker() {
+    colorPicker.classList.remove('visible');
+  }
+  
+  function setBrushColor(color) {
+    currentBrushColor = color;
+    
+    // Update selected state on color options
+    colorOptions.forEach(option => {
+      option.classList.toggle('selected', option.getAttribute('data-color') === color);
+    });
+    
+    // Update color indicator
+    if (colorIndicator) {
+      colorIndicator.style.background = color;
+    }
+    
+    // Update brush color if in draw mode
+    if (currentMode === 'draw' && canvas.freeDrawingBrush) {
+      canvas.freeDrawingBrush.color = color;
+    }
+  }
 
   // ─────────────────────────────────────────────────────────────
   // Keyboard Shortcuts
@@ -283,12 +368,19 @@
       
       switch (e.key.toLowerCase()) {
         case 'a':
+          hideColorPicker();
           setMode('select');
           break;
         case 'd':
-          setMode('draw');
+          if (currentMode === 'draw') {
+            toggleColorPicker();
+          } else {
+            hideColorPicker();
+            setMode('draw');
+          }
           break;
         case 'e':
+          hideColorPicker();
           setMode('erase');
           break;
       }
@@ -768,7 +860,7 @@
 
   function createWardMarker(x, y, wardType, toolbarWard) {
     const colors = {
-      green: { fill: '#22c55e', stroke: '#16a34a', visionFill: 'rgba(34, 197, 94, 0.15)' },
+      green: { fill: '#eab308', stroke: '#ca8a04', visionFill: 'rgba(234, 179, 8, 0.15)' },
       pink: { fill: '#ec4899', stroke: '#db2777', visionFill: 'rgba(236, 72, 153, 0.15)' },
     };
 

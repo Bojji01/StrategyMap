@@ -16,6 +16,7 @@ body {
 /* Left Toolbar */
 .toolbar {
   width: 56px;
+  min-width: 56px;
   background: #1a1e2a;
   border-right: 1px solid #2a3040;
   display: flex;
@@ -23,6 +24,27 @@ body {
   align-items: center;
   padding: 12px 0;
   gap: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: 100vh;
+}
+
+/* Hide scrollbar but keep functionality */
+.toolbar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.toolbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.toolbar::-webkit-scrollbar-thumb {
+  background: #2a3040;
+  border-radius: 2px;
+}
+
+.toolbar::-webkit-scrollbar-thumb:hover {
+  background: #3b82f6;
 }
 
 .tool-btn {
@@ -52,6 +74,87 @@ body {
 .tool-btn.active {
   background: #3b82f6;
   color: #ffffff;
+}
+
+/* Color Indicator on Draw Button */
+.color-indicator {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  border: 1.5px solid rgba(255, 255, 255, 0.8);
+  display: none;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.tool-btn.active .color-indicator {
+  display: block;
+}
+
+/* Draw Button Wrapper & Color Picker */
+.draw-btn-wrapper {
+  position: relative;
+}
+
+#drawBtn {
+  position: relative;
+}
+
+.color-picker {
+  position: fixed;
+  background: #1a1f2e;
+  border-radius: 8px;
+  padding: 6px;
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+  border: 1px solid #2a3040;
+  z-index: 1000;
+}
+
+.color-picker.visible {
+  display: flex;
+}
+
+.color-option {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.color-option:hover {
+  transform: scale(1.15);
+}
+
+.color-option.selected {
+  border-color: #ffffff;
+}
+
+.color-option[data-color="#ef4444"] {
+  background: #ef4444;
+}
+
+.color-option[data-color="#f97316"] {
+  background: #f97316;
+}
+
+.color-option[data-color="#3b82f6"] {
+  background: #3b82f6;
+}
+
+.color-option[data-color="#ffffff"] {
+  background: #ffffff;
+}
+
+.color-option[data-color="#eab308"] {
+  background: #eab308;
 }
 
 .divider {
@@ -236,9 +339,9 @@ body {
 }
 
 .ward.green-ward {
-  background: rgba(34, 197, 94, 0.2);
-  border-color: #22c55e;
-  color: #22c55e;
+  background: rgba(234, 179, 8, 0.2);
+  border-color: #eab308;
+  color: #eab308;
 }
 
 .ward.pink-ward {
@@ -569,4 +672,157 @@ canvas {
   font-size: 11px;
   font-weight: 700;
   color: #3b82f6;
+}
+
+.shortcut-key.mouse-icon,
+.shortcut-key.scroll-icon {
+  font-size: 14px;
+  border-color: #8892a8;
+  color: #8892a8;
+}
+
+/* Responsive - Small screens */
+@media (max-width: 768px) {
+  .toolbar {
+    width: 48px;
+    min-width: 48px;
+    padding: 8px 0;
+    gap: 6px;
+  }
+  
+  .tool-btn {
+    width: 34px;
+    height: 34px;
+  }
+  
+  .tool-btn svg {
+    width: 16px;
+    height: 16px;
+  }
+  
+  .marker {
+    width: 20px;
+    height: 20px;
+    border-width: 2px;
+  }
+  
+  .minion {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .ward {
+    width: 22px;
+    height: 22px;
+  }
+  
+  .ward svg {
+    width: 12px;
+    height: 12px;
+  }
+  
+  .size-slider {
+    height: 32px;
+  }
+  
+  .size-label,
+  .size-value {
+    font-size: 9px;
+  }
+  
+  .divider {
+    width: 24px;
+    margin: 4px 0;
+  }
+  
+  .right-panel.open {
+    width: 80%;
+    min-width: 200px;
+  }
+  
+  .shortcuts-hint {
+    left: 58px;
+    bottom: 10px;
+    padding: 8px 12px;
+  }
+  
+  .shortcuts-title {
+    font-size: 10px;
+  }
+  
+  .shortcut-item {
+    font-size: 11px;
+  }
+  
+  .shortcut-key {
+    width: 18px;
+    height: 18px;
+    font-size: 10px;
+  }
+}
+
+/* Responsive - Extra small screens */
+@media (max-width: 480px) {
+  .toolbar {
+    width: 42px;
+    min-width: 42px;
+    padding: 6px 0;
+    gap: 4px;
+  }
+  
+  .tool-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+  }
+  
+  .tool-btn svg {
+    width: 14px;
+    height: 14px;
+  }
+  
+  .marker {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .minion,
+  .ward {
+    width: 18px;
+    height: 18px;
+  }
+  
+  .right-panel.open {
+    width: 100%;
+  }
+  
+  .shortcuts-hint {
+    left: 50px;
+    font-size: 10px;
+  }
+}
+
+/* Responsive - Height-based adjustments */
+@media (max-height: 600px) {
+  .toolbar {
+    padding: 6px 0;
+    gap: 4px;
+  }
+  
+  .marker-group {
+    gap: 4px;
+  }
+  
+  .minion-group,
+  .ward-group {
+    gap: 4px;
+  }
+  
+  .divider {
+    margin: 2px 0;
+  }
+  
+  .size-control {
+    padding: 2px 0;
+  }
 }
