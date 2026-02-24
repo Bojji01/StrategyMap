@@ -32,6 +32,7 @@
   const colorPicker = document.getElementById('colorPicker');
   const colorOptions = document.querySelectorAll('.color-option');
   const colorIndicator = document.getElementById('colorIndicator');
+  const toggleTowersBtn = document.getElementById('toggleTowersBtn');
 
   // Data Dragon config
   const DDRAGON_VERSION = '14.24.1';
@@ -52,6 +53,43 @@
   let markerRadius = 16; // Current marker radius
   let champions = []; // All champions data
   let selectedToolbarMarker = null; // Currently selected marker for champion assignment
+  let towersVisible = true; // Track tower visibility
+
+  // Reference resolution where tower coordinates were captured
+  // This is used to convert absolute coordinates to relative positions
+  const REFERENCE_BG_LEFT = 0;
+  const REFERENCE_BG_TOP = 0;
+  const REFERENCE_BG_SCALE = 1;
+  
+  // Tower positions relative to the background image
+  // These adapt to different screen sizes automatically
+  const BLUE_TOWERS = [
+    { x: 99, y: 417 },    // Blue 1
+    { x: 543, y: 783 },   // Blue 2
+    { x: 974, y: 1282 },  // Blue 3
+    { x: 149, y: 758 },   // Blue 4
+    { x: 472, y: 931 },   // Blue 5
+    { x: 645, y: 1239 },  // Blue 6
+    { x: 119, y: 974 },   // Blue 7
+    { x: 346, y: 1031 },  // Blue 8
+    { x: 403, y: 1256 },  // Blue 9
+    { x: 172, y: 1165 },  // Blue 10
+    { x: 209, y: 1208 },  // Blue 11
+  ];
+  
+  const RED_TOWERS = [
+    { x: 406, y: 95 },    // Red 1
+    { x: 832, y: 592 },   // Red 2
+    { x: 1284, y: 959 },  // Red 3
+    { x: 738, y: 142 },   // Red 4
+    { x: 908, y: 446 },   // Red 5
+    { x: 1234, y: 618 },  // Red 6
+    { x: 971, y: 119 },   // Red 7
+    { x: 1031, y: 346 },  // Red 8
+    { x: 1261, y: 405 },  // Red 9
+    { x: 1169, y: 174 },  // Red 10
+    { x: 1208, y: 216 },  // Red 11
+  ];
 
   // Calculate canvas size to fill the entire viewport
   function getCanvasSize() {
@@ -94,7 +132,12 @@
         evented: false,
       });
 
-      canvas.setBackgroundImage(bgImage, canvas.renderAll.bind(canvas));
+      canvas.setBackgroundImage(bgImage, function() {
+        canvas.renderAll();
+        
+        // Create static towers on the map after background is set
+        createStaticTowers();
+      });
 
       // Configure brush
       canvas.freeDrawingBrush.color = '#ef4444';
@@ -312,13 +355,69 @@
     setupMarkerDragDrop();
     setupWardDragDrop();
     setupMinionDragDrop();
+    setupTowerClickToggle();
+    setupTowerVisibilityToggle();
     setupZoom();
     setupPan();
     setupRightPanel();
     setupKeyboardShortcuts();
     setupShortcutsHint();
+    setupDebugPosition();
   }
   
+  // ─────────────────────────────────────────────────────────────
+  // Debug Position Display
+  // ─────────────────────────────────────────────────────────────
+
+  function setupDebugPosition() {
+    // Create debug display element
+    const debugEl = document.createElement('div');
+    debugEl.id = 'debugPosition';
+    debugEl.style.cssText = `
+      position: fixed;
+      bottom: 10px;
+      left: 70px;
+      background: rgba(0, 0, 0, 0.8);
+      color: #00ff00;
+      padding: 8px 12px;
+      font-family: monospace;
+      font-size: 14px;
+      border-radius: 4px;
+      z-index: 9999;
+      pointer-events: none;
+    `;
+    debugEl.textContent = 'Click to see position';
+    document.body.appendChild(debugEl);
+
+    // Function to get relative position on background image
+    function getRelativePosition(canvasX, canvasY) {
+      if (!bgImage) return { x: canvasX, y: canvasY };
+      
+      const bgLeft = bgImage.left;
+      const bgTop = bgImage.top;
+      const bgScale = bgImage.scaleX;
+      
+      // Convert canvas coordinates to coordinates relative to background
+      const relX = Math.round((canvasX - bgLeft) / bgScale);
+      const relY = Math.round((canvasY - bgTop) / bgScale);
+      
+      return { x: relX, y: relY };
+    }
+
+    canvas.on('mouse:down', function(opt) {
+      const pointer = canvas.getPointer(opt.e);
+      const rel = getRelativePosition(pointer.x, pointer.y);
+      debugEl.textContent = `Rel X: ${rel.x}, Y: ${rel.y}`;
+      console.log(`Relative position (for towers): X: ${rel.x}, Y: ${rel.y}`);
+    });
+
+    canvas.on('mouse:move', function(opt) {
+      const pointer = canvas.getPointer(opt.e);
+      const rel = getRelativePosition(pointer.x, pointer.y);
+      debugEl.textContent = `Rel X: ${rel.x}, Y: ${rel.y}`;
+    });
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Color Picker Functions
   // ─────────────────────────────────────────────────────────────
@@ -382,6 +481,9 @@
         case 'e':
           hideColorPicker();
           setMode('erase');
+          break;
+        case 't':
+          toggleTowersVisibility();
           break;
       }
     });
@@ -1103,6 +1205,199 @@
 
       draggedMinionTeam = null;
       draggedMinion = null;
+    });
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Tower System
+  // ─────────────────────────────────────────────────────────────
+
+  function createTowerMarker(x, y, team, bgScale) {
+    const imgPath = 'image/Turretico.png';
+    const baseTowerSize = 32; // Base size at scale 1
+    const towerSize = baseTowerSize; // Keep internal calculations at base size
+    const scale = bgScale || 1; // Fallback to 1 if not provided
+    
+    // Team colors
+    const teamColors = {
+      blue: '#3b82f6',
+      red: '#ef4444'
+    };
+    const borderColor = teamColors[team] || '#9ca3af';
+
+    const imgEl = new Image();
+    imgEl.onload = function() {
+      const hiResSize = 64;
+      
+      const patternCanvas = document.createElement('canvas');
+      patternCanvas.width = hiResSize;
+      patternCanvas.height = hiResSize;
+      const ctx = patternCanvas.getContext('2d');
+      
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      
+      ctx.drawImage(imgEl, 0, 0, hiResSize, hiResSize);
+      
+      fabric.Image.fromURL(patternCanvas.toDataURL('image/png'), function(towerImg) {
+        const imgScale = towerSize / hiResSize;
+        towerImg.set({
+          originX: 'center',
+          originY: 'center',
+          scaleX: imgScale,
+          scaleY: imgScale,
+        });
+        
+        // Create border with team color
+        const border = new fabric.Rect({
+          width: towerSize + 2,
+          height: towerSize + 2,
+          fill: 'transparent',
+          stroke: borderColor,
+          strokeWidth: 3,
+          originX: 'center',
+          originY: 'center',
+          rx: 4,
+          ry: 4,
+        });
+
+        // Create red X (initially hidden)
+        const xSize = towerSize * 0.7;
+        const xLine1 = new fabric.Line([-xSize/2, -xSize/2, xSize/2, xSize/2], {
+          stroke: '#ef4444',
+          strokeWidth: 4,
+          originX: 'center',
+          originY: 'center',
+          strokeLineCap: 'round',
+        });
+        const xLine2 = new fabric.Line([xSize/2, -xSize/2, -xSize/2, xSize/2], {
+          stroke: '#ef4444',
+          strokeWidth: 4,
+          originX: 'center',
+          originY: 'center',
+          strokeLineCap: 'round',
+        });
+        
+        // Group the X lines
+        const redX = new fabric.Group([xLine1, xLine2], {
+          originX: 'center',
+          originY: 'center',
+          visible: false,
+        });
+
+        // Group image, border and red X
+        const group = new fabric.Group([towerImg, border, redX], {
+          left: x,
+          top: y,
+          originX: 'center',
+          originY: 'center',
+          scaleX: scale,
+          scaleY: scale,
+          selectable: false,
+          evented: true,
+          hasControls: false,
+          hasBorders: false,
+          lockMovementX: true,
+          lockMovementY: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockRotation: true,
+        });
+
+        group.isTower = true;
+        group.isDestroyed = false;
+        group.redXElement = redX;
+        group.towerTeam = team;
+
+        canvas.add(group);
+        canvas.renderAll();
+      });
+    };
+    imgEl.onerror = function() {
+      console.error('Failed to load tower image:', imgPath);
+    };
+    imgEl.src = imgPath;
+  }
+
+  function setupTowerClickToggle() {
+    canvas.on('mouse:down', function(opt) {
+      // Don't toggle in erase mode
+      if (currentMode === 'erase') return;
+      
+      const target = opt.target;
+      if (target && target.isTower) {
+        // Toggle destroyed state
+        target.isDestroyed = !target.isDestroyed;
+        
+        // Get the red X element from the group
+        const objects = target.getObjects();
+        const redX = objects[2]; // The red X is the third element in the group
+        
+        if (redX) {
+          redX.set('visible', target.isDestroyed);
+        }
+        
+        canvas.renderAll();
+      }
+    });
+  }
+
+  function toggleTowersVisibility() {
+    towersVisible = !towersVisible;
+    
+    // Update button state
+    if (toggleTowersBtn) {
+      toggleTowersBtn.classList.toggle('active', towersVisible);
+    }
+    
+    // Toggle visibility of all tower objects
+    const objects = canvas.getObjects();
+    objects.forEach(obj => {
+      if (obj.isTower) {
+        obj.set('visible', towersVisible);
+      }
+    });
+    
+    canvas.renderAll();
+  }
+
+  function setupTowerVisibilityToggle() {
+    // Button click handler
+    if (toggleTowersBtn) {
+      toggleTowersBtn.addEventListener('click', toggleTowersVisibility);
+    }
+  }
+
+  // Convert reference coordinates to current background position
+  function getScaledTowerPosition(refX, refY) {
+    if (!bgImage) return { x: refX, y: refY, scale: 1 };
+    
+    const bgLeft = bgImage.left;
+    const bgTop = bgImage.top;
+    const bgScale = bgImage.scaleX;
+    
+    // The reference coordinates are relative to the background at scale 1
+    // We need to scale them and offset by the background position
+    const x = bgLeft + (refX * bgScale);
+    const y = bgTop + (refY * bgScale);
+    
+    return { x, y, scale: bgScale };
+  }
+
+  // Create static towers at predefined positions
+  function createStaticTowers() {
+    const bgScale = bgImage ? bgImage.scaleX : 1;
+    
+    // Blue team towers (11 total)
+    BLUE_TOWERS.forEach((pos, index) => {
+      const scaled = getScaledTowerPosition(pos.x, pos.y);
+      createTowerMarker(scaled.x, scaled.y, 'blue', bgScale);
+    });
+    
+    // Red team towers (11 total)
+    RED_TOWERS.forEach((pos, index) => {
+      const scaled = getScaledTowerPosition(pos.x, pos.y);
+      createTowerMarker(scaled.x, scaled.y, 'red', bgScale);
     });
   }
 

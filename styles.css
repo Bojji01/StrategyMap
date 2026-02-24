@@ -66,6 +66,16 @@ body {
   height: 20px;
 }
 
+.tool-btn .tower-icon {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.tool-btn.tower-toggle:not(.active) {
+  opacity: 0.5;
+}
+
 .tool-btn:hover {
   background: #262d3d;
   color: #c8d0e0;
@@ -348,6 +358,35 @@ body {
   background: rgba(236, 72, 153, 0.2);
   border-color: #ec4899;
   color: #ec4899;
+}
+
+/* Tower Markers */
+.tower-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+}
+
+.tower {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  cursor: grab;
+  background-image: url('image/Turretico.png');
+  background-size: cover;
+  background-position: center;
+  border: 2px solid #9ca3af;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+
+.tower:hover {
+  transform: scale(1.15);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.tower:active {
+  cursor: grabbing;
 }
 
 /* Canvas Area */
