@@ -91,6 +91,12 @@
     { x: 1208, y: 216 },  // Red 11
   ];
 
+  // Objective positions relative to the background image
+  const OBJECTIVES = {
+    baron: { x: 465, y: 418, image: 'image/BaronNashorico.png' },
+    elder: { x: 915, y: 973, image: 'image/ElderDragonico.png' }
+  };
+
   // Calculate canvas size to fill the entire viewport
   function getCanvasSize() {
     return {
@@ -137,6 +143,9 @@
         
         // Create static towers on the map after background is set
         createStaticTowers();
+        
+        // Create objective markers (Baron, Elder)
+        createObjectiveMarkers();
       });
 
       // Configure brush
@@ -743,6 +752,100 @@
       opt.e.preventDefault();
       opt.e.stopPropagation();
     });
+    
+    // Setup pinch-to-zoom for mobile
+    setupPinchZoom();
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Pinch-to-Zoom for Mobile
+  // ─────────────────────────────────────────────────────────────
+
+  function setupPinchZoom() {
+    const canvasEl = canvas.upperCanvasEl;
+    
+    let initialDistance = 0;
+    let initialZoom = 1;
+    let isPinching = false;
+    let lastTouchCenter = null;
+
+    // Calculate distance between two touch points
+    function getDistance(touch1, touch2) {
+      const dx = touch1.clientX - touch2.clientX;
+      const dy = touch1.clientY - touch2.clientY;
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    // Get center point between two touches
+    function getTouchCenter(touch1, touch2) {
+      return {
+        x: (touch1.clientX + touch2.clientX) / 2,
+        y: (touch1.clientY + touch2.clientY) / 2
+      };
+    }
+
+    canvasEl.addEventListener('touchstart', function(e) {
+      if (e.touches.length === 2) {
+        isPinching = true;
+        initialDistance = getDistance(e.touches[0], e.touches[1]);
+        initialZoom = canvas.getZoom();
+        lastTouchCenter = getTouchCenter(e.touches[0], e.touches[1]);
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    canvasEl.addEventListener('touchmove', function(e) {
+      if (isPinching && e.touches.length === 2) {
+        const currentDistance = getDistance(e.touches[0], e.touches[1]);
+        const currentCenter = getTouchCenter(e.touches[0], e.touches[1]);
+        
+        // Calculate zoom scale
+        const scale = currentDistance / initialDistance;
+        let newZoom = initialZoom * scale;
+        
+        // Clamp zoom to limits
+        newZoom = Math.max(ZOOM_CONFIG.min, Math.min(ZOOM_CONFIG.max, newZoom));
+        
+        // Get canvas position for zoom point
+        const canvasRect = canvasEl.getBoundingClientRect();
+        const zoomPointX = currentCenter.x - canvasRect.left;
+        const zoomPointY = currentCenter.y - canvasRect.top;
+        
+        // Zoom to center point between fingers
+        const point = new fabric.Point(zoomPointX, zoomPointY);
+        canvas.zoomToPoint(point, newZoom);
+        
+        // Handle panning while pinching
+        if (lastTouchCenter) {
+          const deltaX = currentCenter.x - lastTouchCenter.x;
+          const deltaY = currentCenter.y - lastTouchCenter.y;
+          
+          const vpt = canvas.viewportTransform.slice();
+          vpt[4] += deltaX;
+          vpt[5] += deltaY;
+          canvas.setViewportTransform(vpt);
+        }
+        
+        lastTouchCenter = currentCenter;
+        e.preventDefault();
+      }
+    }, { passive: false });
+
+    canvasEl.addEventListener('touchend', function(e) {
+      if (e.touches.length < 2) {
+        isPinching = false;
+        initialDistance = 0;
+        lastTouchCenter = null;
+        canvas.calcOffset();
+      }
+    });
+
+    canvasEl.addEventListener('touchcancel', function() {
+      isPinching = false;
+      initialDistance = 0;
+      lastTouchCenter = null;
+      canvas.calcOffset();
+    });
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -765,13 +868,14 @@
         canvas.defaultCursor = 'grabbing';
         canvasEl.style.cursor = 'grabbing';
         e.preventDefault();
+        e.stopPropagation();
       }
     });
 
     canvasEl.addEventListener('mousemove', function (e) {
       if (!isPanning) return;
 
-      const vpt = canvas.viewportTransform;
+      const vpt = canvas.viewportTransform.slice(); // Clone the array
 
       // Calculate delta movement
       const deltaX = e.clientX - lastPosX;
@@ -781,7 +885,8 @@
       vpt[4] += deltaX;
       vpt[5] += deltaY;
 
-      canvas.requestRenderAll();
+      // Use setViewportTransform to properly update canvas state
+      canvas.setViewportTransform(vpt);
 
       lastPosX = e.clientX;
       lastPosY = e.clientY;
@@ -792,12 +897,18 @@
         isPanning = false;
         // Restore cursor based on current mode
         if (currentMode === 'select') {
+          canvas.defaultCursor = 'default';
           canvasEl.style.cursor = 'default';
         } else if (currentMode === 'draw') {
+          canvas.defaultCursor = 'crosshair';
           canvasEl.style.cursor = 'crosshair';
         } else if (currentMode === 'erase') {
+          canvas.defaultCursor = 'cell';
           canvasEl.style.cursor = 'cell';
         }
+        // Recalculate object coordinates after panning
+        canvas.calcOffset();
+        canvas.renderAll();
       }
     });
 
@@ -805,6 +916,19 @@
     canvasEl.addEventListener('mouseleave', function () {
       if (isPanning) {
         isPanning = false;
+        // Restore cursor based on current mode
+        if (currentMode === 'select') {
+          canvas.defaultCursor = 'default';
+          canvasEl.style.cursor = 'default';
+        } else if (currentMode === 'draw') {
+          canvas.defaultCursor = 'crosshair';
+          canvasEl.style.cursor = 'crosshair';
+        } else if (currentMode === 'erase') {
+          canvas.defaultCursor = 'cell';
+          canvasEl.style.cursor = 'cell';
+        }
+        canvas.calcOffset();
+        canvas.renderAll();
       }
     });
 
@@ -1325,7 +1449,25 @@
       if (currentMode === 'erase') return;
       
       const target = opt.target;
+      
+      // Handle tower toggle
       if (target && target.isTower) {
+        // Toggle destroyed state
+        target.isDestroyed = !target.isDestroyed;
+        
+        // Get the red X element from the group
+        const objects = target.getObjects();
+        const redX = objects[2]; // The red X is the third element in the group
+        
+        if (redX) {
+          redX.set('visible', target.isDestroyed);
+        }
+        
+        canvas.renderAll();
+      }
+      
+      // Handle objective toggle (Baron, Elder)
+      if (target && target.isObjective) {
         // Toggle destroyed state
         target.isDestroyed = !target.isDestroyed;
         
@@ -1399,6 +1541,124 @@
       const scaled = getScaledTowerPosition(pos.x, pos.y);
       createTowerMarker(scaled.x, scaled.y, 'red', bgScale);
     });
+  }
+
+  // Create objective marker (Baron, Elder Dragon)
+  function createObjectiveMarker(x, y, imgPath, bgScale, objectiveType) {
+    const objectiveSize = 40; // Base size
+    const scale = bgScale || 1;
+    
+    // Objective colors
+    const objectiveColors = {
+      baron: '#a855f7',  // Purple
+      elder: '#06b6d4'   // Cyan
+    };
+    const borderColor = objectiveColors[objectiveType] || '#fbbf24';
+
+    const imgEl = new Image();
+    imgEl.onload = function() {
+      const hiResSize = 64;
+      
+      const patternCanvas = document.createElement('canvas');
+      patternCanvas.width = hiResSize;
+      patternCanvas.height = hiResSize;
+      const ctx = patternCanvas.getContext('2d');
+      
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      
+      ctx.drawImage(imgEl, 0, 0, hiResSize, hiResSize);
+      
+      fabric.Image.fromURL(patternCanvas.toDataURL('image/png'), function(objectiveImg) {
+        const imgScale = objectiveSize / hiResSize;
+        objectiveImg.set({
+          originX: 'center',
+          originY: 'center',
+          scaleX: imgScale,
+          scaleY: imgScale,
+        });
+        
+        // Create square border
+        const border = new fabric.Rect({
+          width: objectiveSize + 2,
+          height: objectiveSize + 2,
+          fill: 'transparent',
+          stroke: borderColor,
+          strokeWidth: 3,
+          originX: 'center',
+          originY: 'center',
+          rx: 4,
+          ry: 4,
+        });
+
+        // Create red X (initially hidden)
+        const xSize = objectiveSize * 0.7;
+        const xLine1 = new fabric.Line([-xSize/2, -xSize/2, xSize/2, xSize/2], {
+          stroke: '#ef4444',
+          strokeWidth: 4,
+          originX: 'center',
+          originY: 'center',
+          strokeLineCap: 'round',
+        });
+        const xLine2 = new fabric.Line([xSize/2, -xSize/2, -xSize/2, xSize/2], {
+          stroke: '#ef4444',
+          strokeWidth: 4,
+          originX: 'center',
+          originY: 'center',
+          strokeLineCap: 'round',
+        });
+        
+        // Group the X lines
+        const redX = new fabric.Group([xLine1, xLine2], {
+          originX: 'center',
+          originY: 'center',
+          visible: false,
+        });
+
+        // Group image, border and red X
+        const group = new fabric.Group([objectiveImg, border, redX], {
+          left: x,
+          top: y,
+          originX: 'center',
+          originY: 'center',
+          scaleX: scale,
+          scaleY: scale,
+          selectable: false,
+          evented: true,
+          hasControls: false,
+          hasBorders: false,
+          lockMovementX: true,
+          lockMovementY: true,
+          lockScalingX: true,
+          lockScalingY: true,
+          lockRotation: true,
+        });
+
+        group.isObjective = true;
+        group.objectiveType = objectiveType;
+        group.isDestroyed = false;
+
+        canvas.add(group);
+        canvas.renderAll();
+      });
+    };
+    imgEl.onerror = function() {
+      console.error('Failed to load objective image:', imgPath);
+    };
+    imgEl.src = imgPath;
+  }
+
+  // Create objective markers (Baron Nashor, Elder Dragon)
+  function createObjectiveMarkers() {
+    const bgScale = bgImage ? bgImage.scaleX : 1;
+    
+    // Baron Nashor
+    const baronPos = getScaledTowerPosition(OBJECTIVES.baron.x, OBJECTIVES.baron.y);
+    createObjectiveMarker(baronPos.x, baronPos.y, OBJECTIVES.baron.image, bgScale, 'baron');
+    
+    // Elder Dragon
+    const elderPos = getScaledTowerPosition(OBJECTIVES.elder.x, OBJECTIVES.elder.y);
+    createObjectiveMarker(elderPos.x, elderPos.y, OBJECTIVES.elder.image, bgScale, 'elder');
   }
 
   function setupMarkerDragDrop() {
