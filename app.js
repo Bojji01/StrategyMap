@@ -33,6 +33,7 @@
   const colorOptions = document.querySelectorAll('.color-option');
   const colorIndicator = document.getElementById('colorIndicator');
   const toggleTowersBtn = document.getElementById('toggleTowersBtn');
+  const toggleMonstersBtn = document.getElementById('toggleMonstersBtn');
 
   // Data Dragon config
   const DDRAGON_VERSION = '14.24.1';
@@ -50,10 +51,44 @@
   let currentMode = 'select'; // 'select', 'draw', or 'erase'
   let currentBrushSize = 4;
   let currentBrushColor = '#ef4444'; // Default red
+  let drawSubMode = 'pen'; // 'pen' or 'arrow'
   let markerRadius = 16; // Current marker radius
   let champions = []; // All champions data
   let selectedToolbarMarker = null; // Currently selected marker for champion assignment
   let towersVisible = true; // Track tower visibility
+  let monstersVisible = true; // Track monster (Baron/Elder) visibility
+
+  // Champion image cache (championId → clipped dataURL)
+  const championImageCache = {};
+
+  function preloadChampionImage(championId) {
+    if (!championId || championImageCache[championId]) return;
+    const imgUrl = `${DDRAGON_BASE}/img/champion/${championId}.png`;
+    const imgEl = new Image();
+    imgEl.crossOrigin = 'anonymous';
+    imgEl.onload = function() {
+      const hiResSize = 120;
+      const hiResRadius = hiResSize / 2;
+      const patternCanvas = document.createElement('canvas');
+      patternCanvas.width = hiResSize;
+      patternCanvas.height = hiResSize;
+      const ctx = patternCanvas.getContext('2d');
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.beginPath();
+      ctx.arc(hiResRadius, hiResRadius, hiResRadius, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(imgEl, 0, 0, hiResSize, hiResSize);
+      championImageCache[championId] = patternCanvas.toDataURL('image/png');
+    };
+    imgEl.src = imgUrl;
+  }
+
+  // Undo history state
+  const MAX_UNDO_HISTORY = 10;
+  let undoHistory = [];
+  let isUndoing = false; // Flag to prevent saving state during undo operation
 
   // Reference resolution where tower coordinates were captured
   // This is used to convert absolute coordinates to relative positions
@@ -96,6 +131,23 @@
     baron: { x: 465, y: 418, image: 'image/BaronNashorico.png' },
     elder: { x: 915, y: 973, image: 'image/ElderDragonico.png' }
   };
+
+  // Jungle camp positions (blue side)
+  const JUNGLE_CAMPS = [
+    { x: 208, y: 604, image: 'image/Gromp.png', name: 'gromp' },
+    { x: 360, y: 651, image: 'image/Blue.png', name: 'blue' },
+    { x: 352, y: 786, image: 'image/Wolf.png', name: 'wolf' },
+    { x: 650, y: 881, image: 'image/Raptor.png', name: 'raptor' },
+    { x: 721, y: 1010, image: 'image/Red.png', name: 'red' },
+    { x: 783, y: 1134, image: 'image/Krug.png', name: 'krug' },
+    // Red side
+    { x: 1167, y: 783, image: 'image/Gromp.png', name: 'gromp' },
+    { x: 1023, y: 737, image: 'image/Blue.png', name: 'blue' },
+    { x: 1025, y: 607, image: 'image/Wolf.png', name: 'wolf' },
+    { x: 730, y: 495, image: 'image/Raptor.png', name: 'raptor' },
+    { x: 657, y: 383, image: 'image/Red.png', name: 'red' },
+    { x: 600, y: 252, image: 'image/Krug.png', name: 'krug' }
+  ];
 
   // Calculate canvas size to fill the entire viewport
   function getCanvasSize() {
@@ -152,10 +204,12 @@
       canvas.freeDrawingBrush.color = '#ef4444';
       canvas.freeDrawingBrush.width = currentBrushSize;
 
-      // Ensure drawn paths are always detectable for erasing
+      // Ensure drawn paths are always detectable for erasing and save for undo
       canvas.on('path:created', function (opt) {
         opt.path.evented = true;
         opt.path.selectable = false;
+        // Save the path for undo (undo will remove it)
+        saveStateForAdd(opt.path);
       });
 
       // Set up tools
@@ -198,12 +252,23 @@
         }
       });
     } else if (mode === 'draw') {
-      canvas.isDrawingMode = true;
       canvas.selection = false;
-      canvas.freeDrawingBrush.color = currentBrushColor;
-      canvas.freeDrawingBrush.width = currentBrushSize;
       canvas.defaultCursor = 'crosshair';
       canvas.hoverCursor = 'crosshair';
+      if (drawSubMode === 'arrow') {
+        canvas.isDrawingMode = false;
+        // Disable object interaction so markers/toggles can't be clicked
+        canvas.forEachObject(obj => {
+          if (obj !== bgImage) {
+            obj.selectable = false;
+            obj.evented = false;
+          }
+        });
+      } else {
+        canvas.isDrawingMode = true;
+        canvas.freeDrawingBrush.color = currentBrushColor;
+        canvas.freeDrawingBrush.width = currentBrushSize;
+      }
     } else if (mode === 'erase') {
       canvas.isDrawingMode = false;
       canvas.selection = false;
@@ -221,18 +286,28 @@
 
   // Erase objects under mouse when in erase mode
   let isErasing = false;
+  let erasedObjectsInStroke = []; // Collect all erased objects in current stroke
 
   function eraseObject(target) {
     if (!target || target === bgImage) return;
+    
+    // Don't erase static elements (towers, objectives)
+    if (target.isTower || target.isObjective) return;
+
+    // Collect erased object for undo
+    erasedObjectsInStroke.push(target);
+    
+    // If it's a ward, also collect the vision circle
+    if (target.isWard && target.visionCircle) {
+      erasedObjectsInStroke.push(target.visionCircle);
+      canvas.remove(target.visionCircle);
+    }
 
     // Restore toolbar marker if this is a champion marker
     if (target.isChampionMarker) {
       restoreToolbarMarker(target);
     }
-    // If it's a ward, also remove the linked vision circle
-    if (target.isWard && target.visionCircle) {
-      canvas.remove(target.visionCircle);
-    }
+    
     canvas.remove(target);
     canvas.renderAll();
   }
@@ -242,6 +317,7 @@
       if (currentMode !== 'erase') return;
       
       isErasing = true;
+      erasedObjectsInStroke = []; // Reset for new stroke
       
       // Use Fabric's built-in target detection
       if (opt.target && opt.target !== bgImage) {
@@ -259,14 +335,234 @@
     });
 
     canvas.on('mouse:up', function () {
+      if (isErasing && erasedObjectsInStroke.length > 0) {
+        // Save all erased objects for undo (undo will add them back)
+        saveStateForRemove(erasedObjectsInStroke);
+      }
       isErasing = false;
+      erasedObjectsInStroke = [];
     });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Arrow Drawing Tool
+  // ─────────────────────────────────────────────────────────────
+
+  let isDrawingArrow = false;
+  let arrowPoints = [];
+  let arrowPreviewLine = null;
+
+  function setupArrowDrawing() {
+    canvas.on('mouse:down', function (opt) {
+      if (currentMode !== 'draw' || drawSubMode !== 'arrow') return;
+      if (opt.e.button !== 0) return; // left click only
+
+      isDrawingArrow = true;
+      const pointer = canvas.getPointer(opt.e);
+      arrowPoints = [{ x: pointer.x, y: pointer.y }];
+
+      // Remove any existing preview
+      if (arrowPreviewLine) {
+        canvas.remove(arrowPreviewLine);
+        arrowPreviewLine = null;
+      }
+    });
+
+    canvas.on('mouse:move', function (opt) {
+      if (!isDrawingArrow || currentMode !== 'draw' || drawSubMode !== 'arrow') return;
+
+      const pointer = canvas.getPointer(opt.e);
+      const last = arrowPoints[arrowPoints.length - 1];
+      const dx = pointer.x - last.x;
+      const dy = pointer.y - last.y;
+      // Only add point if moved enough (skip tiny jitter)
+      if (dx * dx + dy * dy > 9) {
+        arrowPoints.push({ x: pointer.x, y: pointer.y });
+      }
+
+      // Update live preview
+      if (arrowPreviewLine) {
+        canvas.remove(arrowPreviewLine);
+      }
+      if (arrowPoints.length >= 2) {
+        arrowPreviewLine = buildArrowPath(arrowPoints, false);
+        if (arrowPreviewLine) {
+          arrowPreviewLine.selectable = false;
+          arrowPreviewLine.evented = false;
+          canvas.add(arrowPreviewLine);
+          canvas.renderAll();
+        }
+      }
+    });
+
+    canvas.on('mouse:up', function () {
+      if (!isDrawingArrow) return;
+      isDrawingArrow = false;
+
+      // Remove preview
+      if (arrowPreviewLine) {
+        canvas.remove(arrowPreviewLine);
+        arrowPreviewLine = null;
+      }
+
+      if (arrowPoints.length < 2) {
+        arrowPoints = [];
+        return;
+      }
+
+      // Simplify path to reduce jaggedness
+      const simplified = simplifyPoints(arrowPoints, 2);
+
+      // Build final arrow with arrowhead
+      const arrow = buildArrowPath(simplified, true);
+      if (arrow) {
+        arrow.selectable = false;
+        arrow.evented = true;
+        arrow.isArrow = true;
+        canvas.add(arrow);
+        canvas.renderAll();
+        saveStateForAdd(arrow);
+      }
+
+      arrowPoints = [];
+    });
+  }
+
+  /**
+   * Simplify points using Ramer-Douglas-Peucker algorithm
+   */
+  function simplifyPoints(points, tolerance) {
+    if (points.length <= 2) return points;
+
+    // Find the point with the maximum distance from the line between first and last
+    let maxDist = 0;
+    let maxIdx = 0;
+    const first = points[0];
+    const last = points[points.length - 1];
+
+    for (let i = 1; i < points.length - 1; i++) {
+      const d = perpendicularDist(points[i], first, last);
+      if (d > maxDist) {
+        maxDist = d;
+        maxIdx = i;
+      }
+    }
+
+    if (maxDist > tolerance) {
+      const left = simplifyPoints(points.slice(0, maxIdx + 1), tolerance);
+      const right = simplifyPoints(points.slice(maxIdx), tolerance);
+      return left.slice(0, -1).concat(right);
+    }
+    return [first, last];
+  }
+
+  function perpendicularDist(point, lineStart, lineEnd) {
+    const dx = lineEnd.x - lineStart.x;
+    const dy = lineEnd.y - lineStart.y;
+    const lenSq = dx * dx + dy * dy;
+    if (lenSq === 0) return Math.hypot(point.x - lineStart.x, point.y - lineStart.y);
+    const t = Math.max(0, Math.min(1, ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lenSq));
+    const projX = lineStart.x + t * dx;
+    const projY = lineStart.y + t * dy;
+    return Math.hypot(point.x - projX, point.y - projY);
+  }
+
+  /**
+   * Build a fabric Group containing the curved path and optional arrowhead
+   */
+  function buildArrowPath(points, withHead) {
+    if (points.length < 2) return null;
+
+    // Build SVG path string with smooth quadratic curves
+    let pathStr = `M ${points[0].x} ${points[0].y}`;
+
+    if (points.length === 2) {
+      pathStr += ` L ${points[1].x} ${points[1].y}`;
+    } else {
+      // Use quadratic bezier through midpoints for smooth curves
+      for (let i = 0; i < points.length - 1; i++) {
+        const curr = points[i];
+        const next = points[i + 1];
+        if (i === 0) {
+          const midX = (curr.x + next.x) / 2;
+          const midY = (curr.y + next.y) / 2;
+          pathStr += ` L ${midX} ${midY}`;
+        } else if (i === points.length - 2) {
+          pathStr += ` Q ${curr.x} ${curr.y} ${next.x} ${next.y}`;
+        } else {
+          const midX = (curr.x + next.x) / 2;
+          const midY = (curr.y + next.y) / 2;
+          pathStr += ` Q ${curr.x} ${curr.y} ${midX} ${midY}`;
+        }
+      }
+    }
+
+    const strokeW = currentBrushSize;
+
+    const pathObj = new fabric.Path(pathStr, {
+      fill: 'transparent',
+      stroke: currentBrushColor,
+      strokeWidth: strokeW,
+      strokeLineCap: 'round',
+      strokeLineJoin: 'round',
+      selectable: false,
+      evented: false,
+      originX: 'center',
+      originY: 'center',
+    });
+
+    if (!withHead) return pathObj;
+
+    // Compute arrowhead at the end
+    const last = points[points.length - 1];
+    const prev = points[points.length - 2];
+    const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+    const headLen = Math.max(10, strokeW * 4);
+    const headAngle = Math.PI / 6; // 30 degrees
+
+    const x1 = last.x - headLen * Math.cos(angle - headAngle);
+    const y1 = last.y - headLen * Math.sin(angle - headAngle);
+    const x2 = last.x - headLen * Math.cos(angle + headAngle);
+    const y2 = last.y - headLen * Math.sin(angle + headAngle);
+
+    const headPath = new fabric.Path(
+      `M ${x1} ${y1} L ${last.x} ${last.y} L ${x2} ${y2}`,
+      {
+        fill: 'transparent',
+        stroke: currentBrushColor,
+        strokeWidth: strokeW,
+        strokeLineCap: 'round',
+        strokeLineJoin: 'round',
+        selectable: false,
+        evented: false,
+        originX: 'center',
+        originY: 'center',
+      }
+    );
+
+    const group = new fabric.Group([pathObj, headPath], {
+      selectable: false,
+      evented: true,
+      originX: 'center',
+      originY: 'center',
+    });
+
+    return group;
+  }
+
   function clearDrawings() {
-    // Remove all objects except background
-    const objects = canvas.getObjects();
-    objects.forEach(obj => {
+    // Collect all objects to be removed (for undo)
+    const objectsToRemove = canvas.getObjects().filter(obj => {
+      return !obj.isTower && !obj.isObjective;
+    });
+    
+    if (objectsToRemove.length === 0) return;
+
+    // Save for undo before removing
+    saveStateForRemove(objectsToRemove);
+
+    // Remove all objects except static elements
+    objectsToRemove.forEach(obj => {
       // Restore toolbar marker if this is a champion marker
       if (obj.isChampionMarker) {
         restoreToolbarMarker(obj);
@@ -348,6 +644,14 @@
         hideColorPicker();
       }
     });
+
+    // Draw sub-mode toggle (pen / arrow)
+    document.querySelectorAll('.draw-mode-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setDrawSubMode(btn.dataset.submode);
+      });
+    });
     
     // Brush size slider
     brushSizeSlider.addEventListener('input', function () {
@@ -361,11 +665,13 @@
     });
     
     setupEraser();
+    setupArrowDrawing();
     setupMarkerDragDrop();
     setupWardDragDrop();
     setupMinionDragDrop();
     setupTowerClickToggle();
     setupTowerVisibilityToggle();
+    setupMonstersVisibilityToggle();
     setupZoom();
     setupPan();
     setupRightPanel();
@@ -465,6 +771,149 @@
     }
   }
 
+  function setDrawSubMode(subMode) {
+    drawSubMode = subMode;
+    document.querySelectorAll('.draw-mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.submode === subMode);
+    });
+    // Update the draw button icon to match selected sub-mode
+    const penIcon = document.getElementById('drawBtnIconPen');
+    const arrowIcon = document.getElementById('drawBtnIconArrow');
+    if (penIcon && arrowIcon) {
+      penIcon.classList.toggle('active', subMode === 'pen');
+      arrowIcon.classList.toggle('active', subMode === 'arrow');
+    }
+    if (currentMode === 'draw') {
+      setMode('draw');
+    }
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Undo System (Action-based)
+  // ─────────────────────────────────────────────────────────────
+
+  // Helper to check if an object is a static element (tower or objective)
+  function isStaticElement(obj) {
+    return obj.isTower || obj.isObjective;
+  }
+
+  // Store actions that can be undone
+  // Each action: { type: 'add'|'remove'|'draw', objects: [...], toolbarInfo: [...] }
+  
+  function saveStateForAdd(objectsToAdd) {
+    if (isUndoing || !canvas) return;
+    
+    // When adding objects, save an action that can be undone by removing them
+    const action = {
+      type: 'add',
+      objects: Array.isArray(objectsToAdd) ? objectsToAdd : [objectsToAdd],
+      toolbarInfo: []
+    };
+    
+    // Store toolbar info for champion markers
+    action.objects.forEach(obj => {
+      if (obj.isChampionMarker && obj.toolbarMarker) {
+        action.toolbarInfo.push({
+          championId: obj.championId,
+          team: obj.team,
+          toolbarMarker: obj.toolbarMarker
+        });
+      }
+    });
+    
+    undoHistory.push(action);
+    if (undoHistory.length > MAX_UNDO_HISTORY) {
+      undoHistory.shift();
+    }
+  }
+
+  function saveStateForRemove(objectsToRemove) {
+    if (isUndoing || !canvas) return;
+    
+    // When removing objects, save them so they can be restored
+    const action = {
+      type: 'remove',
+      objects: Array.isArray(objectsToRemove) ? objectsToRemove.slice() : [objectsToRemove],
+      toolbarInfo: []
+    };
+    
+    // Store toolbar info for champion markers
+    action.objects.forEach(obj => {
+      if (obj.isChampionMarker && obj.toolbarMarker) {
+        action.toolbarInfo.push({
+          championId: obj.championId,
+          team: obj.team,
+          toolbarMarker: obj.toolbarMarker
+        });
+      }
+    });
+    
+    undoHistory.push(action);
+    if (undoHistory.length > MAX_UNDO_HISTORY) {
+      undoHistory.shift();
+    }
+  }
+
+  // Legacy function for compatibility - called before draw
+  function saveState() {
+    // For drawing, we'll save state after path is created
+    // This function is kept for compatibility but does nothing for draws
+  }
+
+  function undo() {
+    if (undoHistory.length === 0 || !canvas) {
+      console.log('Nothing to undo');
+      return;
+    }
+    
+    isUndoing = true;
+    
+    const action = undoHistory.pop();
+    
+    if (action.type === 'add') {
+      // Undo add = remove the objects
+      action.objects.forEach(obj => {
+        if (obj.isChampionMarker) {
+          restoreToolbarMarker(obj);
+        }
+        if (obj.isWard && obj.visionCircle) {
+          canvas.remove(obj.visionCircle);
+        }
+        canvas.remove(obj);
+      });
+    } else if (action.type === 'remove') {
+      // Undo remove = add the objects back
+      action.objects.forEach(obj => {
+        canvas.add(obj);
+        
+        // Re-link champion markers to their toolbar elements
+        if (obj.isChampionMarker && obj.championId) {
+          const team = obj.team || 'blue';
+          const selector = `.marker-drop-zone[data-team="${team}"] .champion-marker[data-champion-id="${obj.championId}"]`;
+          const toolbarMarker = document.querySelector(selector);
+          if (toolbarMarker) {
+            obj.toolbarMarker = toolbarMarker;
+            toolbarMarker.style.visibility = 'hidden';
+            toolbarMarker.style.opacity = '0';
+            toolbarMarker.draggable = false;
+          }
+        }
+      });
+    }
+    
+    canvas.renderAll();
+    isUndoing = false;
+  }
+
+  function restoreAllToolbarMarkers() {
+    // Restore all champion markers in toolbar
+    document.querySelectorAll('.champion-marker').forEach(marker => {
+      marker.style.visibility = 'visible';
+      marker.style.opacity = '1';
+      marker.draggable = true;
+    });
+  }
+
   // ─────────────────────────────────────────────────────────────
   // Keyboard Shortcuts
   // ─────────────────────────────────────────────────────────────
@@ -473,6 +922,13 @@
     document.addEventListener('keydown', function(e) {
       // Ignore if user is typing in an input field
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+      
+      // Ctrl+Z for undo
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        undo();
+        return;
+      }
       
       switch (e.key.toLowerCase()) {
         case 'a':
@@ -494,6 +950,9 @@
         case 't':
           toggleTowersVisibility();
           break;
+        case 'm':
+          toggleMonstersVisibility();
+          break;
       }
     });
   }
@@ -509,7 +968,8 @@
     
     // Also hide on any keyboard shortcut use
     document.addEventListener('keydown', function(e) {
-      if (['a', 'd', 'e'].includes(e.key.toLowerCase())) {
+      if (['a', 'd', 'e'].includes(e.key.toLowerCase()) || 
+          ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z')) {
         shortcutsHint.classList.add('hidden');
       }
     });
@@ -706,6 +1166,9 @@
       return;
     }
     
+    // Preload the champion image for instant canvas rendering
+    preloadChampionImage(champId);
+
     // Apply champion to selected toolbar marker
     selectedToolbarMarker.style.backgroundImage = `url(${iconUrl})`;
     selectedToolbarMarker.classList.add('has-champion');
@@ -723,7 +1186,155 @@
       draftSlot.title = champName;
     }
     
+    // Update any existing canvas marker linked to this toolbar marker
+    updateCanvasMarkerChampion(selectedToolbarMarker, champId, team);
+    
     deselectToolbarMarker();
+  }
+
+  /**
+   * If a marker from the toolbar is already on the canvas, re-create it
+   * with the newly assigned champion image.
+   */
+  function updateCanvasMarkerChampion(toolbarMarkerEl, newChampionId, team) {
+    if (!canvas) return;
+    
+    // Find the canvas object linked to this toolbar marker
+    const existingMarker = canvas.getObjects().find(obj => 
+      obj.isChampionMarker && obj.toolbarMarker === toolbarMarkerEl
+    );
+    
+    if (!existingMarker) return; // Marker not on the canvas yet
+    
+    // Save old champion info for undo
+    const oldChampionId = existingMarker.championId;
+    const oldChampionName = toolbarMarkerEl.dataset.championName || '';
+    
+    // Remember position and scale
+    const pos = { left: existingMarker.left, top: existingMarker.top };
+    const scale = { scaleX: existingMarker.scaleX, scaleY: existingMarker.scaleY };
+    const baseRadius = existingMarker.baseRadius || 16;
+    
+    // Remove the old marker from canvas (keep reference for undo)
+    canvas.remove(existingMarker);
+    
+    const colors = {
+      blue: { stroke: '#3b82f6', fill: '#1e3a5f' },
+      red: { stroke: '#ef4444', fill: '#5f1e1e' },
+    };
+    const color = colors[team] || colors.blue;
+    const BASE_RADIUS = baseRadius;
+    
+    const markerProps = {
+      left: pos.left,
+      top: pos.top,
+      originX: 'center',
+      originY: 'center',
+      selectable: true,
+      evented: true,
+      hasControls: false,
+      hasBorders: true,
+      lockScalingX: true,
+      lockScalingY: true,
+      lockRotation: true,
+      scaleX: scale.scaleX,
+      scaleY: scale.scaleY,
+    };
+    
+    const addUpdatedMarker = (marker) => {
+      marker.team = team;
+      marker.isChampionMarker = true;
+      marker.toolbarMarker = toolbarMarkerEl;
+      marker.championId = newChampionId || null;
+      marker.baseRadius = BASE_RADIUS;
+      
+      canvas.add(marker);
+      canvas.bringToFront(marker);
+      canvas.renderAll();
+      
+      // Update any previous undo entries that reference the old marker
+      // so they point to the new one instead
+      undoHistory.forEach(action => {
+        if (action.type === 'add' && action.objects) {
+          const idx = action.objects.indexOf(existingMarker);
+          if (idx !== -1) {
+            action.objects[idx] = marker;
+          }
+        }
+      });
+    };
+    
+    if (newChampionId) {
+      const buildUpdatedFromDataURL = (dataURL) => {
+        fabric.Image.fromURL(dataURL, function(clippedImg) {
+          const imgScale = (BASE_RADIUS * 2) / 120;
+          clippedImg.set({
+            originX: 'center',
+            originY: 'center',
+            scaleX: imgScale,
+            scaleY: imgScale,
+          });
+          const border = new fabric.Circle({
+            radius: BASE_RADIUS + 1,
+            fill: 'transparent',
+            stroke: color.stroke,
+            strokeWidth: 3,
+            originX: 'center',
+            originY: 'center',
+          });
+          const group = new fabric.Group([clippedImg, border], {
+            ...markerProps,
+          });
+          addUpdatedMarker(group);
+        });
+      };
+
+      if (championImageCache[newChampionId]) {
+        buildUpdatedFromDataURL(championImageCache[newChampionId]);
+      } else {
+        const imgUrl = `${DDRAGON_BASE}/img/champion/${newChampionId}.png`;
+        const imgEl = new Image();
+        imgEl.crossOrigin = 'anonymous';
+        imgEl.onload = function() {
+          const hiResSize = 120;
+          const hiResRadius = hiResSize / 2;
+          const patternCanvas = document.createElement('canvas');
+          patternCanvas.width = hiResSize;
+          patternCanvas.height = hiResSize;
+          const ctx = patternCanvas.getContext('2d');
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.beginPath();
+          ctx.arc(hiResRadius, hiResRadius, hiResRadius, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(imgEl, 0, 0, hiResSize, hiResSize);
+          const dataURL = patternCanvas.toDataURL('image/png');
+          championImageCache[newChampionId] = dataURL;
+          buildUpdatedFromDataURL(dataURL);
+        };
+        imgEl.onerror = function() {
+          const circle = new fabric.Circle({
+            ...markerProps,
+            radius: BASE_RADIUS,
+            fill: color.fill,
+            stroke: color.stroke,
+            strokeWidth: 3,
+          });
+          addUpdatedMarker(circle);
+        };
+        imgEl.src = imgUrl;
+      }
+    } else {
+      const circle = new fabric.Circle({
+        ...markerProps,
+        radius: BASE_RADIUS,
+        fill: color.fill,
+        stroke: color.stroke,
+        strokeWidth: 3,
+      });
+      addUpdatedMarker(circle);
+    }
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -984,49 +1595,21 @@
       canvas.add(marker);
       canvas.bringToFront(marker);
       canvas.renderAll();
+      
+      // Save for undo (undo will remove it)
+      saveStateForAdd(marker);
     };
 
     if (championId) {
-      // Load champion image and create image marker
-      const imgUrl = `${DDRAGON_BASE}/img/champion/${championId}.png`;
-      
-      // Load the image first
-      const imgEl = new Image();
-      imgEl.crossOrigin = 'anonymous';
-      imgEl.onload = function() {
-        // Use high resolution for quality (Data Dragon images are 120x120)
-        const hiResSize = 120;
-        const hiResRadius = hiResSize / 2;
-        
-        // Create a high-res pattern canvas
-        const patternCanvas = document.createElement('canvas');
-        patternCanvas.width = hiResSize;
-        patternCanvas.height = hiResSize;
-        const ctx = patternCanvas.getContext('2d');
-        
-        // Enable high quality rendering
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
-        
-        // Draw circular clipped image at high resolution
-        ctx.beginPath();
-        ctx.arc(hiResRadius, hiResRadius, hiResRadius, 0, Math.PI * 2);
-        ctx.closePath();
-        ctx.clip();
-        ctx.drawImage(imgEl, 0, 0, hiResSize, hiResSize);
-        
-        // Create fabric image from the clipped canvas
-        fabric.Image.fromURL(patternCanvas.toDataURL('image/png'), function(clippedImg) {
-          // Scale image to base size (32x32 for radius 16)
-          const imgScale = (BASE_RADIUS * 2) / hiResSize;
+      const buildMarkerFromDataURL = (dataURL) => {
+        fabric.Image.fromURL(dataURL, function(clippedImg) {
+          const imgScale = (BASE_RADIUS * 2) / 120;
           clippedImg.set({
             originX: 'center',
             originY: 'center',
             scaleX: imgScale,
             scaleY: imgScale,
           });
-          
-          // Create border ring at base size
           const border = new fabric.Circle({
             radius: BASE_RADIUS + 1,
             fill: 'transparent',
@@ -1035,27 +1618,49 @@
             originX: 'center',
             originY: 'center',
           });
-
-          // Group image and border (at base size, will be scaled by markerProps)
           const group = new fabric.Group([clippedImg, border], {
             ...markerProps,
           });
-
           addMarkerToCanvas(group);
         });
       };
-      imgEl.onerror = function() {
-        // Fallback to simple circle if image fails
-        const circle = new fabric.Circle({
-          ...markerProps,
-          radius: BASE_RADIUS,
-          fill: color.fill,
-          stroke: color.stroke,
-          strokeWidth: 3,
-        });
-        addMarkerToCanvas(circle);
-      };
-      imgEl.src = imgUrl;
+
+      if (championImageCache[championId]) {
+        buildMarkerFromDataURL(championImageCache[championId]);
+      } else {
+        const imgUrl = `${DDRAGON_BASE}/img/champion/${championId}.png`;
+        const imgEl = new Image();
+        imgEl.crossOrigin = 'anonymous';
+        imgEl.onload = function() {
+          const hiResSize = 120;
+          const hiResRadius = hiResSize / 2;
+          const patternCanvas = document.createElement('canvas');
+          patternCanvas.width = hiResSize;
+          patternCanvas.height = hiResSize;
+          const ctx = patternCanvas.getContext('2d');
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+          ctx.beginPath();
+          ctx.arc(hiResRadius, hiResRadius, hiResRadius, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(imgEl, 0, 0, hiResSize, hiResSize);
+          const dataURL = patternCanvas.toDataURL('image/png');
+          championImageCache[championId] = dataURL;
+          buildMarkerFromDataURL(dataURL);
+        };
+        imgEl.onerror = function() {
+          const circle = new fabric.Circle({
+            ...markerProps,
+            radius: BASE_RADIUS,
+            fill: color.fill,
+            stroke: color.stroke,
+            strokeWidth: 3,
+          });
+          addMarkerToCanvas(circle);
+        };
+        imgEl.src = imgUrl;
+      }
     } else {
       // No champion - create simple colored circle at base size
       const circle = new fabric.Circle({
@@ -1082,11 +1687,11 @@
   // Ward System
   // ─────────────────────────────────────────────────────────────
 
-  const WARD_VISION_RADIUS = 55;
+  const WARD_VISION_RADIUS = 43;
 
   function createWardMarker(x, y, wardType, toolbarWard) {
     const colors = {
-      green: { fill: '#eab308', stroke: '#ca8a04', visionFill: 'rgba(234, 179, 8, 0.15)' },
+      green: { fill: '#22c55e', stroke: '#16a34a', visionFill: 'rgba(34, 197, 94, 0.15)' },
       pink: { fill: '#ec4899', stroke: '#db2777', visionFill: 'rgba(236, 72, 153, 0.15)' },
     };
 
@@ -1149,6 +1754,9 @@
       canvas.sendToBack(bgImage);
     }
     canvas.renderAll();
+    
+    // Save for undo (undo will remove both ward center and vision circle)
+    saveStateForAdd([visionCircle, wardCenter]);
   }
 
   function setupWardDragDrop() {
@@ -1204,6 +1812,9 @@
 
       draggedWardType = null;
       draggedWard = null;
+
+      hideColorPicker();
+      setMode('select');
     });
   }
 
@@ -1275,30 +1886,77 @@
         canvas.add(group);
         canvas.bringToFront(group);
         canvas.renderAll();
+        
+        // Save for undo (undo will remove it)
+        saveStateForAdd(group);
       });
     };
     imgEl.src = imgPath;
   }
 
   function setupMinionDragDrop() {
-    const minions = document.querySelectorAll('.minion');
+    const activeMinion = document.getElementById('activeMinion');
+    const minionPicker = document.getElementById('minionPicker');
+    const minionOptions = document.querySelectorAll('.minion-option');
     const canvasEl = canvas.upperCanvasEl;
 
     let draggedMinionTeam = null;
-    let draggedMinion = null;
 
-    minions.forEach(minion => {
-      minion.addEventListener('dragstart', function (e) {
-        draggedMinionTeam = this.dataset.minionTeam;
-        draggedMinion = this;
-        e.dataTransfer.effectAllowed = 'copy';
-        e.dataTransfer.setData('text/plain', 'minion');
-      });
+    // Set initial selected state
+    minionOptions.forEach(opt => {
+      if (opt.dataset.minionTeam === activeMinion.dataset.minionTeam) {
+        opt.classList.add('selected');
+      }
+    });
 
-      minion.addEventListener('dragend', function () {
-        draggedMinionTeam = null;
-        draggedMinion = null;
+    // Click to toggle picker
+    activeMinion.addEventListener('click', function (e) {
+      // Don't open picker if drag just happened
+      if (e.detail === 0) return;
+      const isVisible = minionPicker.classList.toggle('visible');
+      if (isVisible) {
+        const btnRect = activeMinion.getBoundingClientRect();
+        minionPicker.style.left = (btnRect.right + 8) + 'px';
+        minionPicker.style.top = btnRect.top + 'px';
+      }
+    });
+
+    // Select team from picker
+    minionOptions.forEach(opt => {
+      opt.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const team = this.dataset.minionTeam;
+
+        // Update the active minion appearance
+        activeMinion.classList.remove('blue-minion', 'red-minion');
+        activeMinion.classList.add(team === 'blue' ? 'blue-minion' : 'red-minion');
+        activeMinion.dataset.minionTeam = team;
+        activeMinion.title = (team === 'blue' ? 'Blue' : 'Red') + ' Minion Wave';
+
+        // Update selected state
+        minionOptions.forEach(o => o.classList.toggle('selected', o.dataset.minionTeam === team));
+
+        minionPicker.classList.remove('visible');
       });
+    });
+
+    // Close picker when clicking elsewhere
+    document.addEventListener('click', function (e) {
+      if (!minionPicker.contains(e.target) && e.target !== activeMinion && !activeMinion.contains(e.target)) {
+        minionPicker.classList.remove('visible');
+      }
+    });
+
+    // Drag the active minion
+    activeMinion.addEventListener('dragstart', function (e) {
+      draggedMinionTeam = this.dataset.minionTeam;
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', 'minion');
+      minionPicker.classList.remove('visible');
+    });
+
+    activeMinion.addEventListener('dragend', function () {
+      draggedMinionTeam = null;
     });
 
     const canvasContainer = canvasEl.parentElement;
@@ -1311,7 +1969,7 @@
     });
 
     canvasContainer.addEventListener('drop', function (e) {
-      if (!draggedMinionTeam || !draggedMinion) return;
+      if (!draggedMinionTeam) return;
 
       e.preventDefault();
 
@@ -1328,7 +1986,9 @@
       createMinionMarker(canvasX, canvasY, draggedMinionTeam);
 
       draggedMinionTeam = null;
-      draggedMinion = null;
+
+      hideColorPicker();
+      setMode('select');
     });
   }
 
@@ -1510,6 +2170,32 @@
     }
   }
 
+  function toggleMonstersVisibility() {
+    monstersVisible = !monstersVisible;
+    
+    // Update button state
+    if (toggleMonstersBtn) {
+      toggleMonstersBtn.classList.toggle('active', monstersVisible);
+    }
+    
+    // Toggle visibility of all objective objects (Baron, Elder Dragon)
+    const objects = canvas.getObjects();
+    objects.forEach(obj => {
+      if (obj.isObjective) {
+        obj.set('visible', monstersVisible);
+      }
+    });
+    
+    canvas.renderAll();
+  }
+
+  function setupMonstersVisibilityToggle() {
+    // Button click handler
+    if (toggleMonstersBtn) {
+      toggleMonstersBtn.addEventListener('click', toggleMonstersVisibility);
+    }
+  }
+
   // Convert reference coordinates to current background position
   function getScaledTowerPosition(refX, refY) {
     if (!bgImage) return { x: refX, y: refY, scale: 1 };
@@ -1551,7 +2237,13 @@
     // Objective colors
     const objectiveColors = {
       baron: '#a855f7',  // Purple
-      elder: '#06b6d4'   // Cyan
+      elder: '#06b6d4',  // Cyan
+      gromp: '#22c55e',  // Green
+      blue: '#3b82f6',   // Blue
+      wolf: '#6b7280',   // Gray
+      raptor: '#f97316', // Orange
+      red: '#ef4444',    // Red
+      krug: '#a16207'    // Brown
     };
     const borderColor = objectiveColors[objectiveType] || '#fbbf24';
 
@@ -1659,6 +2351,12 @@
     // Elder Dragon
     const elderPos = getScaledTowerPosition(OBJECTIVES.elder.x, OBJECTIVES.elder.y);
     createObjectiveMarker(elderPos.x, elderPos.y, OBJECTIVES.elder.image, bgScale, 'elder');
+    
+    // Jungle Camps
+    JUNGLE_CAMPS.forEach(camp => {
+      const campPos = getScaledTowerPosition(camp.x, camp.y);
+      createObjectiveMarker(campPos.x, campPos.y, camp.image, bgScale, camp.name);
+    });
   }
 
   function setupMarkerDragDrop() {
@@ -1718,6 +2416,9 @@
 
       draggedTeam = null;
       draggedMarker = null;
+
+      hideColorPicker();
+      setMode('select');
     });
   }
 

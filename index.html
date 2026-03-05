@@ -16,14 +16,27 @@
       </button>
       <div class="draw-btn-wrapper">
         <button id="drawBtn" class="tool-btn" title="Draw (D)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <svg id="drawBtnIconPen" class="draw-btn-icon active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 19l7-7 3 3-7 7-3-3z"/>
             <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/>
             <path d="M2 2l7.586 7.586"/>
           </svg>
+          <svg id="drawBtnIconArrow" class="draw-btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M5 12h14"/>
+            <path d="M13 5l7 7-7 7"/>
+          </svg>
           <span id="colorIndicator" class="color-indicator"></span>
         </button>
         <div id="colorPicker" class="color-picker">
+          <div class="draw-mode-toggle">
+            <button class="draw-mode-btn active" data-submode="pen" title="Pen">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/></svg>
+            </button>
+            <button class="draw-mode-btn" data-submode="arrow" title="Arrow">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14"/><path d="M13 5l7 7-7 7"/></svg>
+            </button>
+          </div>
+          <div class="picker-divider"></div>
           <div class="color-option" data-color="#ef4444" title="Red"></div>
           <div class="color-option" data-color="#f97316" title="Orange"></div>
           <div class="color-option" data-color="#3b82f6" title="Blue"></div>
@@ -76,9 +89,16 @@
         <div class="marker red" data-team="red" data-role="sup" data-index="4" draggable="true" title="Red Support"></div>
       </div>
       <div class="divider"></div>
-      <div class="minion-group">
-        <div class="minion blue-minion" data-minion-team="blue" draggable="true" title="Blue Minion Wave"></div>
-        <div class="minion red-minion" data-minion-team="red" draggable="true" title="Red Minion Wave"></div>
+      <div class="minion-btn-wrapper">
+        <div id="activeMinion" class="minion blue-minion" data-minion-team="blue" draggable="true" title="Minion Wave"></div>
+        <div id="minionPicker" class="minion-picker">
+          <div class="minion-option" data-minion-team="blue" title="Blue Minion">
+            <div class="minion-preview blue-minion"></div>
+          </div>
+          <div class="minion-option" data-minion-team="red" title="Red Minion">
+            <div class="minion-preview red-minion"></div>
+          </div>
+        </div>
       </div>
       <div class="divider"></div>
       <div class="ward-group">
@@ -96,6 +116,9 @@
       <div class="divider"></div>
       <button id="toggleTowersBtn" class="tool-btn tower-toggle active" title="Toggle Towers (T)">
         <img src="image/Turretico.png" alt="Tower" class="tower-icon">
+      </button>
+      <button id="toggleMonstersBtn" class="tool-btn monster-toggle active" title="Toggle Monsters (M)">
+        <img src="image/Monstericon.png" alt="Monsters" class="monster-icon">
       </button>
       <div class="divider"></div>
       <div class="size-control">
@@ -189,6 +212,7 @@
       <div class="shortcut-item"><span class="shortcut-key">A</span> Select/Move</div>
       <div class="shortcut-item"><span class="shortcut-key">D</span> Draw</div>
       <div class="shortcut-item"><span class="shortcut-key">E</span> Erase</div>
+      <div class="shortcut-item"><span class="shortcut-key">Ctrl+Z</span> Undo</div>
       <div class="shortcut-item"><span class="shortcut-key mouse-icon">🖱</span> Pan Map</div>
       <div class="shortcut-item"><span class="shortcut-key scroll-icon">⇅</span> Zoom</div>
     </div>
