@@ -244,9 +244,9 @@
       canvas.selection = true;
       canvas.defaultCursor = 'default';
       canvas.hoverCursor = 'move';
-      // Make all objects (except background) selectable
+      // Make all objects (except background, towers, and objectives) selectable
       canvas.forEachObject(obj => {
-        if (obj !== bgImage) {
+        if (obj !== bgImage && !obj.isTower && !obj.isObjective) {
           obj.selectable = true;
           obj.evented = true;
         }
@@ -677,62 +677,8 @@
     setupRightPanel();
     setupKeyboardShortcuts();
     setupShortcutsHint();
-    setupDebugPosition();
   }
   
-  // ─────────────────────────────────────────────────────────────
-  // Debug Position Display
-  // ─────────────────────────────────────────────────────────────
-
-  function setupDebugPosition() {
-    // Create debug display element
-    const debugEl = document.createElement('div');
-    debugEl.id = 'debugPosition';
-    debugEl.style.cssText = `
-      position: fixed;
-      bottom: 10px;
-      left: 70px;
-      background: rgba(0, 0, 0, 0.8);
-      color: #00ff00;
-      padding: 8px 12px;
-      font-family: monospace;
-      font-size: 14px;
-      border-radius: 4px;
-      z-index: 9999;
-      pointer-events: none;
-    `;
-    debugEl.textContent = 'Click to see position';
-    document.body.appendChild(debugEl);
-
-    // Function to get relative position on background image
-    function getRelativePosition(canvasX, canvasY) {
-      if (!bgImage) return { x: canvasX, y: canvasY };
-      
-      const bgLeft = bgImage.left;
-      const bgTop = bgImage.top;
-      const bgScale = bgImage.scaleX;
-      
-      // Convert canvas coordinates to coordinates relative to background
-      const relX = Math.round((canvasX - bgLeft) / bgScale);
-      const relY = Math.round((canvasY - bgTop) / bgScale);
-      
-      return { x: relX, y: relY };
-    }
-
-    canvas.on('mouse:down', function(opt) {
-      const pointer = canvas.getPointer(opt.e);
-      const rel = getRelativePosition(pointer.x, pointer.y);
-      debugEl.textContent = `Rel X: ${rel.x}, Y: ${rel.y}`;
-      console.log(`Relative position (for towers): X: ${rel.x}, Y: ${rel.y}`);
-    });
-
-    canvas.on('mouse:move', function(opt) {
-      const pointer = canvas.getPointer(opt.e);
-      const rel = getRelativePosition(pointer.x, pointer.y);
-      debugEl.textContent = `Rel X: ${rel.x}, Y: ${rel.y}`;
-    });
-  }
-
   // ─────────────────────────────────────────────────────────────
   // Color Picker Functions
   // ─────────────────────────────────────────────────────────────
@@ -1010,7 +956,7 @@
     const scale = markerRadius / BASE_RADIUS;
     
     objects.forEach(obj => {
-      if (obj.isChampionMarker) {
+      if (obj.isChampionMarker || obj.isMinion) {
         obj.set('scaleX', scale);
         obj.set('scaleY', scale);
         obj.setCoords(); // Update bounding box
@@ -1031,10 +977,20 @@
       
       champions = Object.values(data.data).sort((a, b) => a.name.localeCompare(b.name));
       renderChampionGrid(champions);
+      
+      // Preload all champion images for faster display
+      preloadAllChampionImages(champions);
     } catch (error) {
       console.error('Failed to load champions:', error);
       championGrid.innerHTML = '<p style="color: #ef4444; font-size: 12px;">Failed to load champions</p>';
     }
+  }
+
+  function preloadAllChampionImages(champList) {
+    champList.forEach(champ => {
+      const img = new Image();
+      img.src = `${DDRAGON_BASE}/img/champion/${champ.id}.png`;
+    });
   }
 
   function renderChampionGrid(champList) {
@@ -1825,7 +1781,9 @@
   function createMinionMarker(x, y, team) {
     const imgPath = team === 'blue' ? 'image/BlueWaveMinion.png' : 'image/RedWaveMinion.png';
     const borderColor = team === 'blue' ? '#3b82f6' : '#ef4444';
-    const minionSize = 28;
+    const BASE_MINION_SIZE = 28;
+    const BASE_RADIUS = 16;
+    const scale = markerRadius / BASE_RADIUS;
 
     const imgEl = new Image();
     imgEl.onload = function() {
@@ -1844,7 +1802,7 @@
       ctx.drawImage(imgEl, 0, 0, hiResSize, hiResSize);
       
       fabric.Image.fromURL(patternCanvas.toDataURL('image/png'), function(minionImg) {
-        const imgScale = minionSize / hiResSize;
+        const imgScale = BASE_MINION_SIZE / hiResSize;
         minionImg.set({
           originX: 'center',
           originY: 'center',
@@ -1854,8 +1812,8 @@
         
         // Create square border
         const border = new fabric.Rect({
-          width: minionSize + 2,
-          height: minionSize + 2,
+          width: BASE_MINION_SIZE + 2,
+          height: BASE_MINION_SIZE + 2,
           fill: 'transparent',
           stroke: borderColor,
           strokeWidth: 3,
@@ -1871,6 +1829,8 @@
           top: y,
           originX: 'center',
           originY: 'center',
+          scaleX: scale,
+          scaleY: scale,
           selectable: true,
           evented: true,
           hasControls: false,
