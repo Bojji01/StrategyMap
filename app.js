@@ -465,11 +465,101 @@
     }
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // Coordinate Normalization (for cross-resolution sync)
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Convert canvas absolute coordinates to normalized (0-1) coordinates
+   * relative to the background image
+   */
+  function toNormalizedCoords(canvasX, canvasY) {
+    if (!bgImage) return { x: 0, y: 0 };
+    
+    const bgLeft = bgImage.left;
+    const bgTop = bgImage.top;
+    const bgWidth = bgImage.width * bgImage.scaleX;
+    const bgHeight = bgImage.height * bgImage.scaleY;
+    
+    return {
+      x: (canvasX - bgLeft) / bgWidth,
+      y: (canvasY - bgTop) / bgHeight
+    };
+  }
+
+  /**
+   * Convert normalized (0-1) coordinates back to canvas absolute coordinates
+   */
+  function fromNormalizedCoords(normX, normY) {
+    if (!bgImage) return { x: 0, y: 0 };
+    
+    const bgLeft = bgImage.left;
+    const bgTop = bgImage.top;
+    const bgWidth = bgImage.width * bgImage.scaleX;
+    const bgHeight = bgImage.height * bgImage.scaleY;
+    
+    return {
+      x: bgLeft + (normX * bgWidth),
+      y: bgTop + (normY * bgHeight)
+    };
+  }
+
+  /**
+   * Normalize a path's points for cross-resolution sync
+   */
+  function normalizePathData(pathArray) {
+    if (!bgImage || !pathArray) return pathArray;
+    
+    return pathArray.map(cmd => {
+      if (!Array.isArray(cmd)) return cmd;
+      
+      const newCmd = [cmd[0]]; // Keep the command letter (M, L, Q, C, etc.)
+      
+      // Process pairs of coordinates
+      for (let i = 1; i < cmd.length; i += 2) {
+        if (i + 1 < cmd.length) {
+          const norm = toNormalizedCoords(cmd[i], cmd[i + 1]);
+          newCmd.push(norm.x, norm.y);
+        } else {
+          newCmd.push(cmd[i]); // Odd remaining value
+        }
+      }
+      
+      return newCmd;
+    });
+  }
+
+  /**
+   * Denormalize a path's points from normalized to canvas coordinates
+   */
+  function denormalizePathData(pathArray) {
+    if (!bgImage || !pathArray) return pathArray;
+    
+    return pathArray.map(cmd => {
+      if (!Array.isArray(cmd)) return cmd;
+      
+      const newCmd = [cmd[0]]; // Keep the command letter
+      
+      // Process pairs of coordinates
+      for (let i = 1; i < cmd.length; i += 2) {
+        if (i + 1 < cmd.length) {
+          const abs = fromNormalizedCoords(cmd[i], cmd[i + 1]);
+          newCmd.push(abs.x, abs.y);
+        } else {
+          newCmd.push(cmd[i]); // Odd remaining value
+        }
+      }
+      
+      return newCmd;
+    });
+  }
+
   /**
    * Serialize canvas state for syncing
+   * Coordinates are normalized (0-1) relative to background image for cross-resolution support
    */
   function serializeCanvasState() {
-    if (!canvas) return null;
+    if (!canvas || !bgImage) return null;
 
     const objects = canvas.getObjects().filter(obj => {
       // Only sync user-created objects (not towers, objectives, or background)
@@ -477,17 +567,22 @@
     });
 
     const serialized = objects.map(obj => {
+      // Normalize position relative to background image
+      const normPos = toNormalizedCoords(obj.left, obj.top);
+      
       const base = {
         type: obj.type,
-        left: obj.left,
-        top: obj.top,
+        // Use normalized coordinates
+        normX: normPos.x,
+        normY: normPos.y,
         scaleX: obj.scaleX,
         scaleY: obj.scaleY,
         angle: obj.angle || 0,
       };
 
       if (obj.type === 'path') {
-        base.path = obj.path;
+        // Normalize path data
+        base.path = normalizePathData(obj.path);
         base.stroke = obj.stroke;
         base.strokeWidth = obj.strokeWidth;
         base.fill = obj.fill;
@@ -505,8 +600,13 @@
           base.wardType = obj.wardType;
         } else if (obj.isArrow) {
           base.isArrow = true;
-          // Serialize group SVG
-          base.svg = obj.toSVG();
+          // For arrows, store the normalized path data
+          const arrowObjs = obj.getObjects();
+          if (arrowObjs.length > 0 && arrowObjs[0].path) {
+            base.arrowPath = normalizePathData(arrowObjs[0].path);
+            base.arrowStroke = arrowObjs[0].stroke;
+            base.arrowStrokeWidth = arrowObjs[0].strokeWidth;
+          }
         }
       } else if (obj.type === 'circle') {
         if (obj.isChampionMarker) {
@@ -601,31 +701,116 @@
 
   /**
    * Recreate a canvas object from serialized data
+   * Converts normalized coordinates back to absolute canvas coordinates
    */
   function recreateObject(objData) {
-    if (!objData) return;
+    if (!objData || !bgImage) return;
+
+    // Convert normalized coordinates to absolute
+    const absPos = fromNormalizedCoords(objData.normX || 0, objData.normY || 0);
 
     if (objData.type === 'path') {
-      const path = new fabric.Path(objData.path, {
-        left: objData.left,
-        top: objData.top,
+      // Denormalize path data - the path coordinates are already absolute after denormalization
+      const denormalizedPath = denormalizePathData(objData.path);
+      const path = new fabric.Path(denormalizedPath, {
         stroke: objData.stroke,
         strokeWidth: objData.strokeWidth,
         fill: objData.fill || 'transparent',
-        scaleX: objData.scaleX,
-        scaleY: objData.scaleY,
         selectable: false,
         evented: true
       });
       canvas.add(path);
     } else if (objData.isChampionMarker) {
-      // Recreate champion marker
-      createChampionMarkerFromData(objData);
+      // Recreate champion marker with converted coordinates
+      createChampionMarkerFromData({
+        ...objData,
+        left: absPos.x,
+        top: absPos.y
+      });
     } else if (objData.isMinion) {
-      createMinionMarker(objData.left, objData.top, objData.minionTeam);
+      createMinionMarker(absPos.x, absPos.y, objData.minionTeam);
     } else if (objData.isWard) {
-      createWardFromData(objData);
+      createWardFromData({
+        ...objData,
+        left: absPos.x,
+        top: absPos.y
+      });
+    } else if (objData.isArrow && objData.arrowPath) {
+      // Recreate arrow from normalized path
+      const denormalizedPath = denormalizePathData(objData.arrowPath);
+      recreateArrowFromPath(denormalizedPath, objData.arrowStroke, objData.arrowStrokeWidth);
     }
+  }
+
+  /**
+   * Recreate an arrow from denormalized path data
+   */
+  function recreateArrowFromPath(pathData, stroke, strokeWidth) {
+    if (!pathData || pathData.length < 2) return;
+    
+    // Extract points from path
+    const points = [];
+    pathData.forEach(cmd => {
+      if (Array.isArray(cmd) && cmd.length >= 3) {
+        // Get the last coordinate pair in each command
+        const x = cmd[cmd.length - 2];
+        const y = cmd[cmd.length - 1];
+        if (typeof x === 'number' && typeof y === 'number') {
+          points.push({ x, y });
+        }
+      }
+    });
+    
+    if (points.length < 2) return;
+
+    // Build path string
+    let pathStr = `M ${points[0].x} ${points[0].y}`;
+    for (let i = 1; i < points.length; i++) {
+      pathStr += ` L ${points[i].x} ${points[i].y}`;
+    }
+
+    const pathObj = new fabric.Path(pathStr, {
+      fill: 'transparent',
+      stroke: stroke || currentBrushColor,
+      strokeWidth: strokeWidth || currentBrushSize,
+      strokeLineCap: 'round',
+      strokeLineJoin: 'round',
+      selectable: false,
+      evented: false,
+    });
+
+    // Add arrowhead
+    const last = points[points.length - 1];
+    const prev = points[points.length - 2];
+    const angle = Math.atan2(last.y - prev.y, last.x - prev.x);
+    const headLen = Math.max(10, (strokeWidth || currentBrushSize) * 4);
+    const headAngle = Math.PI / 6;
+
+    const x1 = last.x - headLen * Math.cos(angle - headAngle);
+    const y1 = last.y - headLen * Math.sin(angle - headAngle);
+    const x2 = last.x - headLen * Math.cos(angle + headAngle);
+    const y2 = last.y - headLen * Math.sin(angle + headAngle);
+
+    const headPath = new fabric.Path(
+      `M ${x1} ${y1} L ${last.x} ${last.y} L ${x2} ${y2}`,
+      {
+        fill: 'transparent',
+        stroke: stroke || currentBrushColor,
+        strokeWidth: strokeWidth || currentBrushSize,
+        strokeLineCap: 'round',
+        strokeLineJoin: 'round',
+        selectable: false,
+        evented: false,
+      }
+    );
+
+    const group = new fabric.Group([pathObj, headPath], {
+      selectable: false,
+      evented: true,
+    });
+    group.isArrow = true;
+
+    canvas.add(group);
   }
 
   /**
