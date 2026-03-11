@@ -175,6 +175,9 @@
   let userId = null;
   let syncDebounceTimer = null;
   const SYNC_DEBOUNCE_MS = 100;
+  
+  // Champion assignments state: { 'blue_top': 'Ahri', 'red_jg': 'LeeSin', ... }
+  let championAssignments = {};
 
   // Collaboration UI elements
   const collabPanel = document.getElementById('collabPanel');
@@ -210,7 +213,10 @@
       const urlParams = new URLSearchParams(window.location.search);
       const roomFromUrl = urlParams.get('room');
 
-      if (roomFromUrl) {
+      // Validate room ID format (only alphanumeric, 8-16 chars)
+      const isValidRoomId = (id) => /^[A-Za-z0-9]{6,16}$/.test(id);
+
+      if (roomFromUrl && isValidRoomId(roomFromUrl)) {
         joinRoom(roomFromUrl);
       } else {
         // Create a new room automatically
@@ -235,13 +241,22 @@
   }
 
   /**
-   * Generate a random room ID
+   * Generate a random room ID (12 chars for better security)
    */
   function generateRoomId() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
     let result = '';
-    for (let i = 0; i < 8; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    // Use crypto API if available for better randomness
+    if (window.crypto && window.crypto.getRandomValues) {
+      const array = new Uint32Array(12);
+      window.crypto.getRandomValues(array);
+      for (let i = 0; i < 12; i++) {
+        result += chars.charAt(array[i] % chars.length);
+      }
+    } else {
+      for (let i = 0; i < 12; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
     }
     return result;
   }
@@ -305,6 +320,18 @@
       const objectives = snapshot.val();
       if (objectives) {
         applyRemoteObjectiveStates(objectives);
+      }
+    });
+
+    // Listen for champion assignments
+    roomRef.child('championAssignments').on('value', (snapshot) => {
+      const assignments = snapshot.val();
+      if (assignments) {
+        applyRemoteChampionAssignments(assignments);
+      } else {
+        // No assignments yet, clear local state
+        championAssignments = {};
+        updateChampionGridAvailability();
       }
     });
 
@@ -432,6 +459,7 @@
           clearDrawings();
           resetAllTowers();
           resetAllObjectives();
+          resetChampionAssignments();
         }
       });
     }
@@ -789,6 +817,149 @@
     });
     
     canvas.renderAll();
+  }
+
+  /**
+   * Sync champion assignment to Firebase
+   */
+  function syncChampionAssignment(team, role, championId) {
+    if (!roomRef || isRemoteUpdate) return;
+    
+    const key = `${team}_${role}`;
+    
+    if (championId) {
+      roomRef.child('championAssignments').child(key).set({
+        championId,
+        timestamp: Date.now(),
+        updatedBy: userId
+      });
+    } else {
+      // Remove assignment
+      roomRef.child('championAssignments').child(key).remove();
+    }
+  }
+
+  /**
+   * Apply remote champion assignments
+   */
+  function applyRemoteChampionAssignments(assignments) {
+    isRemoteUpdate = true;
+    
+    // Build new assignments map
+    const newAssignments = {};
+    
+    Object.keys(assignments).forEach(key => {
+      const data = assignments[key];
+      if (data && data.championId) {
+        newAssignments[key] = data.championId;
+        
+        // Apply to UI if not from this user
+        if (data.updatedBy !== userId) {
+          const [team, role] = key.split('_');
+          applyChampionToMarkerUI(team, role, data.championId);
+        }
+      }
+    });
+    
+    championAssignments = newAssignments;
+    updateChampionGridAvailability();
+    
+    isRemoteUpdate = false;
+  }
+
+  /**
+   * Apply champion to marker UI elements (toolbar + draft slot)
+   */
+  function applyChampionToMarkerUI(team, role, championId) {
+    const iconUrl = `${DDRAGON_BASE}/img/champion/${championId}.png`;
+    const champData = champions.find(c => c.id === championId);
+    const champName = champData ? champData.name : championId;
+    
+    // Update toolbar marker
+    const marker = document.querySelector(`.marker[data-team="${team}"][data-role="${role}"]`);
+    if (marker) {
+      marker.style.backgroundImage = `url(${iconUrl})`;
+      marker.classList.add('has-champion');
+      marker.dataset.championId = championId;
+      marker.dataset.championName = champName;
+      marker.title = champName;
+    }
+    
+    // Update draft slot
+    const draftSlot = document.querySelector(`.role-icon[data-team="${team}"][data-role="${role}"]`);
+    if (draftSlot) {
+      draftSlot.style.backgroundImage = `url(${iconUrl})`;
+      draftSlot.classList.add('has-champion');
+      draftSlot.title = champName;
+    }
+    
+    // Preload champion image for canvas
+    preloadChampionImage(championId);
+  }
+
+  /**
+   * Check if a champion is already assigned to any marker
+   */
+  function isChampionAssigned(championId) {
+    return Object.values(championAssignments).includes(championId);
+  }
+
+  /**
+   * Get which marker a champion is assigned to
+   */
+  function getChampionAssignment(championId) {
+    for (const [key, champId] of Object.entries(championAssignments)) {
+      if (champId === championId) {
+        return key; // e.g., 'blue_top'
+      }
+    }
+    return null;
+  }
+
+  /**
+   * Update champion grid to show which champions are taken
+   */
+  function updateChampionGridAvailability() {
+    if (!championGrid) return;
+    
+    const icons = championGrid.querySelectorAll('.champion-icon');
+    icons.forEach(icon => {
+      const champId = icon.dataset.championId;
+      const assignment = getChampionAssignment(champId);
+      
+      if (assignment) {
+        icon.classList.add('taken');
+        const [team, role] = assignment.split('_');
+        icon.dataset.assignedTo = `${team.toUpperCase()} ${role.toUpperCase()}`;
+      } else {
+        icon.classList.remove('taken');
+        delete icon.dataset.assignedTo;
+      }
+    });
+  }
+
+  /**
+   * Reset all champion assignments (for new room)
+   */
+  function resetChampionAssignments() {
+    championAssignments = {};
+    
+    // Clear UI
+    document.querySelectorAll('.marker.has-champion').forEach(marker => {
+      marker.style.backgroundImage = '';
+      marker.classList.remove('has-champion');
+      delete marker.dataset.championId;
+      delete marker.dataset.championName;
+      marker.title = marker.dataset.team + ' ' + marker.dataset.role;
+    });
+    
+    document.querySelectorAll('.role-icon.has-champion').forEach(slot => {
+      slot.style.backgroundImage = '';
+      slot.classList.remove('has-champion');
+      slot.title = '';
+    });
+    
+    updateChampionGridAvailability();
   }
 
   // Calculate canvas size to fill the entire viewport
@@ -1677,6 +1848,9 @@
       
       championGrid.appendChild(div);
     });
+    
+    // Update availability to show taken champions
+    updateChampionGridAvailability();
   }
 
   function setupChampionSearch() {
@@ -1790,6 +1964,30 @@
       return;
     }
     
+    // Check if this champion is already assigned to another marker
+    if (isChampionAssigned(champId)) {
+      const assignment = getChampionAssignment(champId);
+      const team = selectedToolbarMarker.dataset.team;
+      const role = selectedToolbarMarker.dataset.role;
+      const currentKey = `${team}_${role}`;
+      
+      // Only block if assigned to a DIFFERENT marker
+      if (assignment !== currentKey) {
+        // Champion is taken, show feedback
+        console.log(`Champion ${champName} is already assigned`);
+        return;
+      }
+    }
+    
+    // Get previous champion assigned to this marker (to free it up)
+    const team = selectedToolbarMarker.dataset.team;
+    const role = selectedToolbarMarker.dataset.role;
+    const key = `${team}_${role}`;
+    const previousChampId = championAssignments[key];
+    
+    // Update local assignment state
+    championAssignments[key] = champId;
+    
     // Preload the champion image for instant canvas rendering
     preloadChampionImage(champId);
 
@@ -1801,8 +1999,6 @@
     selectedToolbarMarker.title = champName;
     
     // Also update the draft slot icon
-    const team = selectedToolbarMarker.dataset.team;
-    const role = selectedToolbarMarker.dataset.role;
     const draftSlot = document.querySelector(`.role-icon[data-team="${team}"][data-role="${role}"]`);
     if (draftSlot) {
       draftSlot.style.backgroundImage = `url(${iconUrl})`;
@@ -1812,6 +2008,12 @@
     
     // Update any existing canvas marker linked to this toolbar marker
     updateCanvasMarkerChampion(selectedToolbarMarker, champId, team);
+    
+    // Sync to Firebase
+    syncChampionAssignment(team, role, champId);
+    
+    // Update champion grid to show new availability
+    updateChampionGridAvailability();
     
     deselectToolbarMarker();
   }

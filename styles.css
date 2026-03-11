@@ -752,6 +752,36 @@ canvas {
   opacity: 1;
 }
 
+/* Champion already assigned to another marker */
+.champion-icon.taken {
+  opacity: 0.35;
+  cursor: not-allowed;
+  position: relative;
+}
+
+.champion-icon.taken::after {
+  content: attr(data-assigned-to);
+  position: absolute;
+  bottom: 2px;
+  left: 0;
+  right: 0;
+  background: rgba(0, 0, 0, 0.85);
+  color: #f59e0b;
+  font-size: 7px;
+  font-weight: 600;
+  text-align: center;
+  padding: 1px 2px;
+  border-radius: 0 0 4px 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.champion-icon.taken:hover {
+  border-color: #ef4444;
+  transform: none;
+  opacity: 0.35;
+}
+
 /* Toolbar Marker with Champion */
 .marker.has-champion {
   background-size: cover;
