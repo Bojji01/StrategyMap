@@ -975,3 +975,257 @@ canvas {
     padding: 2px 0;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────
+   Collaboration UI
+   ───────────────────────────────────────────────────────────── */
+
+.collab-panel {
+  position: fixed;
+  top: 12px;
+  left: 70px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 100;
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #1a1e2a;
+  border-radius: 20px;
+  font-size: 12px;
+  border: 1px solid #2a3040;
+}
+
+.connection-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6b7280;
+  transition: background 0.3s ease;
+}
+
+.connection-status.online .status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 6px #22c55e;
+}
+
+.connection-status.offline .status-dot {
+  background: #6b7280;
+}
+
+.connection-status.connecting .status-dot {
+  background: #f59e0b;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.share-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border: none;
+  border-radius: 20px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.share-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.share-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.users-online {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #1a1e2a;
+  border-radius: 20px;
+  font-size: 12px;
+  color: #22c55e;
+  border: 1px solid #2a3040;
+}
+
+/* Share Modal */
+.share-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.share-modal-content {
+  background: #1a1e2a;
+  border-radius: 16px;
+  padding: 24px;
+  width: 90%;
+  max-width: 480px;
+  border: 1px solid #2a3040;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+}
+
+.share-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.share-modal-header h3 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #f2f4f8;
+}
+
+.close-modal-btn {
+  background: transparent;
+  border: none;
+  color: #8892a8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.close-modal-btn:hover {
+  background: #262d3d;
+  color: #f2f4f8;
+}
+
+.share-modal-body p {
+  color: #8892a8;
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.share-link-container {
+  display: flex;
+  gap: 8px;
+}
+
+.share-link-input {
+  flex: 1;
+  padding: 12px 16px;
+  background: #0d1018;
+  border: 1px solid #2a3040;
+  border-radius: 8px;
+  color: #f2f4f8;
+  font-size: 13px;
+  font-family: monospace;
+}
+
+.share-link-input:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+.copy-link-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 18px;
+  background: #3b82f6;
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.copy-link-btn:hover {
+  background: #2563eb;
+}
+
+.copy-success {
+  margin-top: 12px;
+  padding: 10px;
+  background: rgba(34, 197, 94, 0.15);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 8px;
+  color: #22c55e;
+  font-size: 13px;
+  text-align: center;
+}
+
+.share-modal-footer {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #2a3040;
+}
+
+.new-room-btn {
+  width: 100%;
+  padding: 12px;
+  background: transparent;
+  border: 1px solid #3b82f6;
+  border-radius: 8px;
+  color: #3b82f6;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.new-room-btn:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+/* Mobile adjustments for collaboration UI */
+@media (max-width: 640px) {
+  .collab-panel {
+    left: 60px;
+    gap: 8px;
+  }
+  
+  .share-btn span {
+    display: none;
+  }
+  
+  .share-btn {
+    padding: 8px;
+    border-radius: 50%;
+  }
+  
+  .connection-status .status-text {
+    display: none;
+  }
+  
+  .connection-status {
+    padding: 6px;
+    border-radius: 50%;
+  }
+  
+  .share-modal-content {
+    margin: 16px;
+  }
+}

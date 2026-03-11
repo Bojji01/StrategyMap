@@ -149,6 +149,648 @@
     { x: 600, y: 252, image: 'image/Krug.png', name: 'krug' }
   ];
 
+  // ─────────────────────────────────────────────────────────────
+  // Firebase Collaboration System
+  // ─────────────────────────────────────────────────────────────
+
+  // Firebase configuration
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyCE3kow9B2xhB46RZnRQGXh9SmfjhfBbio",
+    authDomain: "strategygg-30ea8.firebaseapp.com",
+    databaseURL: "https://strategygg-30ea8-default-rtdb.firebaseio.com",
+    projectId: "strategygg-30ea8",
+    storageBucket: "strategygg-30ea8.firebasestorage.app",
+    messagingSenderId: "1077423109757",
+    appId: "1:1077423109757:web:519858fb03fcec20bde314",
+    measurementId: "G-M3WPHJLR6E"
+  };
+
+  // Collaboration state
+  let firebaseApp = null;
+  let database = null;
+  let roomRef = null;
+  let currentRoomId = null;
+  let isRemoteUpdate = false; // Prevent sync loops
+  let connectedUsers = 0;
+  let userId = null;
+  let syncDebounceTimer = null;
+  const SYNC_DEBOUNCE_MS = 100;
+
+  // Collaboration UI elements
+  const collabPanel = document.getElementById('collabPanel');
+  const shareBtn = document.getElementById('shareBtn');
+  const shareModal = document.getElementById('shareModal');
+  const closeShareModal = document.getElementById('closeShareModal');
+  const shareLinkInput = document.getElementById('shareLink');
+  const copyLinkBtn = document.getElementById('copyLinkBtn');
+  const copySuccess = document.getElementById('copySuccess');
+  const newRoomBtn = document.getElementById('newRoomBtn');
+  const connectionStatus = document.getElementById('connectionStatus');
+  const statusText = connectionStatus?.querySelector('.status-text');
+  const usersOnline = document.getElementById('usersOnline');
+  const userCountEl = document.getElementById('userCount');
+
+  /**
+   * Initialize Firebase and collaboration system
+   */
+  function initCollaboration() {
+    if (typeof firebase === 'undefined') {
+      console.warn('Firebase SDK not loaded - collaboration disabled');
+      if (collabPanel) collabPanel.style.display = 'none';
+      return;
+    }
+
+    try {
+      // Initialize Firebase
+      firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+      database = firebase.database();
+      userId = generateUserId();
+
+      // Check for room ID in URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const roomFromUrl = urlParams.get('room');
+
+      if (roomFromUrl) {
+        joinRoom(roomFromUrl);
+      } else {
+        // Create a new room automatically
+        createNewRoom();
+      }
+
+      // Setup collaboration UI events
+      setupCollaborationUI();
+
+      console.log('Collaboration system initialized');
+    } catch (error) {
+      console.error('Failed to initialize Firebase:', error);
+      setConnectionStatus('offline');
+    }
+  }
+
+  /**
+   * Generate a unique user ID for this session
+   */
+  function generateUserId() {
+    return 'user_' + Math.random().toString(36).substr(2, 9) + '_' + Date.now();
+  }
+
+  /**
+   * Generate a random room ID
+   */
+  function generateRoomId() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+    let result = '';
+    for (let i = 0; i < 8; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
+  }
+
+  /**
+   * Create a new collaboration room
+   */
+  function createNewRoom() {
+    const roomId = generateRoomId();
+    joinRoom(roomId);
+    
+    // Update URL without reloading
+    const newUrl = `${window.location.pathname}?room=${roomId}`;
+    window.history.pushState({ roomId }, '', newUrl);
+  }
+
+  /**
+   * Join an existing room or create if it doesn't exist
+   */
+  function joinRoom(roomId) {
+    if (roomRef) {
+      // Leave current room
+      leaveRoom();
+    }
+
+    currentRoomId = roomId;
+    setConnectionStatus('connecting');
+
+    roomRef = database.ref('rooms/' + roomId);
+
+    // Track presence
+    const presenceRef = roomRef.child('presence').child(userId);
+    presenceRef.set(true);
+    presenceRef.onDisconnect().remove();
+
+    // Listen for presence changes
+    roomRef.child('presence').on('value', (snapshot) => {
+      const users = snapshot.val();
+      connectedUsers = users ? Object.keys(users).length : 1;
+      updateUsersOnlineUI();
+    });
+
+    // Listen for canvas state changes
+    roomRef.child('canvasState').on('value', (snapshot) => {
+      const state = snapshot.val();
+      if (state && state.lastUpdatedBy !== userId) {
+        applyRemoteState(state);
+      }
+    });
+
+    // Listen for tower states
+    roomRef.child('towers').on('value', (snapshot) => {
+      const towers = snapshot.val();
+      if (towers) {
+        applyRemoteTowerStates(towers);
+      }
+    });
+
+    // Listen for objective states
+    roomRef.child('objectives').on('value', (snapshot) => {
+      const objectives = snapshot.val();
+      if (objectives) {
+        applyRemoteObjectiveStates(objectives);
+      }
+    });
+
+    // Connection state
+    database.ref('.info/connected').on('value', (snapshot) => {
+      if (snapshot.val() === true) {
+        setConnectionStatus('online');
+      } else {
+        setConnectionStatus('offline');
+      }
+    });
+
+    updateShareLink();
+    console.log('Joined room:', roomId);
+  }
+
+  /**
+   * Leave the current room
+   */
+  function leaveRoom() {
+    if (roomRef) {
+      roomRef.child('presence').child(userId).remove();
+      roomRef.off();
+      roomRef = null;
+    }
+    currentRoomId = null;
+  }
+
+  /**
+   * Set connection status UI
+   */
+  function setConnectionStatus(status) {
+    if (!connectionStatus) return;
+    
+    connectionStatus.className = 'connection-status ' + status;
+    
+    if (statusText) {
+      switch (status) {
+        case 'online':
+          statusText.textContent = 'Connected';
+          break;
+        case 'connecting':
+          statusText.textContent = 'Connecting...';
+          break;
+        case 'offline':
+          statusText.textContent = 'Offline';
+          break;
+      }
+    }
+  }
+
+  /**
+   * Update users online UI
+   */
+  function updateUsersOnlineUI() {
+    if (!usersOnline || !userCountEl) return;
+    
+    if (connectedUsers > 1) {
+      usersOnline.style.display = 'flex';
+      userCountEl.textContent = connectedUsers;
+    } else {
+      usersOnline.style.display = 'none';
+    }
+  }
+
+  /**
+   * Update share link input with current room URL
+   */
+  function updateShareLink() {
+    if (!shareLinkInput || !currentRoomId) return;
+    
+    const shareUrl = `${window.location.origin}${window.location.pathname}?room=${currentRoomId}`;
+    shareLinkInput.value = shareUrl;
+  }
+
+  /**
+   * Setup collaboration UI event listeners
+   */
+  function setupCollaborationUI() {
+    if (shareBtn) {
+      shareBtn.addEventListener('click', () => {
+        if (shareModal) {
+          updateShareLink();
+          shareModal.style.display = 'flex';
+        }
+      });
+    }
+
+    if (closeShareModal) {
+      closeShareModal.addEventListener('click', () => {
+        if (shareModal) shareModal.style.display = 'none';
+      });
+    }
+
+    if (shareModal) {
+      shareModal.addEventListener('click', (e) => {
+        if (e.target === shareModal) {
+          shareModal.style.display = 'none';
+        }
+      });
+    }
+
+    if (copyLinkBtn) {
+      copyLinkBtn.addEventListener('click', () => {
+        if (shareLinkInput) {
+          shareLinkInput.select();
+          navigator.clipboard.writeText(shareLinkInput.value).then(() => {
+            if (copySuccess) {
+              copySuccess.style.display = 'block';
+              setTimeout(() => {
+                copySuccess.style.display = 'none';
+              }, 2000);
+            }
+          });
+        }
+      });
+    }
+
+    if (newRoomBtn) {
+      newRoomBtn.addEventListener('click', () => {
+        createNewRoom();
+        if (shareModal) shareModal.style.display = 'none';
+        // Clear canvas and reset
+        if (canvas) {
+          clearDrawings();
+          resetAllTowers();
+          resetAllObjectives();
+        }
+      });
+    }
+  }
+
+  /**
+   * Serialize canvas state for syncing
+   */
+  function serializeCanvasState() {
+    if (!canvas) return null;
+
+    const objects = canvas.getObjects().filter(obj => {
+      // Only sync user-created objects (not towers, objectives, or background)
+      return !obj.isTower && !obj.isObjective && obj !== bgImage;
+    });
+
+    const serialized = objects.map(obj => {
+      const base = {
+        type: obj.type,
+        left: obj.left,
+        top: obj.top,
+        scaleX: obj.scaleX,
+        scaleY: obj.scaleY,
+        angle: obj.angle || 0,
+      };
+
+      if (obj.type === 'path') {
+        base.path = obj.path;
+        base.stroke = obj.stroke;
+        base.strokeWidth = obj.strokeWidth;
+        base.fill = obj.fill;
+      } else if (obj.type === 'group') {
+        if (obj.isChampionMarker) {
+          base.isChampionMarker = true;
+          base.championId = obj.championId;
+          base.team = obj.team;
+          base.baseRadius = obj.baseRadius;
+        } else if (obj.isMinion) {
+          base.isMinion = true;
+          base.minionTeam = obj.minionTeam;
+        } else if (obj.isWard) {
+          base.isWard = true;
+          base.wardType = obj.wardType;
+        } else if (obj.isArrow) {
+          base.isArrow = true;
+          // Serialize group SVG
+          base.svg = obj.toSVG();
+        }
+      } else if (obj.type === 'circle') {
+        if (obj.isChampionMarker) {
+          base.isChampionMarker = true;
+          base.team = obj.team;
+          base.fill = obj.fill;
+          base.stroke = obj.stroke;
+          base.strokeWidth = obj.strokeWidth;
+          base.radius = obj.radius;
+        }
+      }
+
+      return base;
+    });
+
+    return {
+      objects: serialized,
+      timestamp: Date.now(),
+      lastUpdatedBy: userId
+    };
+  }
+
+  /**
+   * Debounced sync to Firebase
+   */
+  function syncCanvasToFirebase() {
+    if (!roomRef || isRemoteUpdate) return;
+
+    clearTimeout(syncDebounceTimer);
+    syncDebounceTimer = setTimeout(() => {
+      const state = serializeCanvasState();
+      if (state) {
+        roomRef.child('canvasState').set(state);
+      }
+    }, SYNC_DEBOUNCE_MS);
+  }
+
+  /**
+   * Sync tower state to Firebase
+   */
+  function syncTowerState(towerIndex, team, isDestroyed) {
+    if (!roomRef || isRemoteUpdate) return;
+    
+    const key = `${team}_${towerIndex}`;
+    roomRef.child('towers').child(key).set({
+      isDestroyed,
+      timestamp: Date.now(),
+      updatedBy: userId
+    });
+  }
+
+  /**
+   * Sync objective state to Firebase
+   */
+  function syncObjectiveState(objectiveType, isDestroyed) {
+    if (!roomRef || isRemoteUpdate) return;
+    
+    roomRef.child('objectives').child(objectiveType).set({
+      isDestroyed,
+      timestamp: Date.now(),
+      updatedBy: userId
+    });
+  }
+
+  /**
+   * Apply remote canvas state
+   */
+  function applyRemoteState(state) {
+    if (!canvas || !state || !state.objects) return;
+    
+    isRemoteUpdate = true;
+
+    // Clear current user objects (keep towers, objectives)
+    const toRemove = canvas.getObjects().filter(obj => 
+      !obj.isTower && !obj.isObjective && obj !== bgImage
+    );
+    toRemove.forEach(obj => {
+      if (obj.isChampionMarker) {
+        restoreToolbarMarker(obj);
+      }
+      canvas.remove(obj);
+    });
+
+    // Recreate objects from state
+    state.objects.forEach(objData => {
+      recreateObject(objData);
+    });
+
+    canvas.renderAll();
+    isRemoteUpdate = false;
+  }
+
+  /**
+   * Recreate a canvas object from serialized data
+   */
+  function recreateObject(objData) {
+    if (!objData) return;
+
+    if (objData.type === 'path') {
+      const path = new fabric.Path(objData.path, {
+        left: objData.left,
+        top: objData.top,
+        stroke: objData.stroke,
+        strokeWidth: objData.strokeWidth,
+        fill: objData.fill || 'transparent',
+        scaleX: objData.scaleX,
+        scaleY: objData.scaleY,
+        selectable: false,
+        evented: true
+      });
+      canvas.add(path);
+    } else if (objData.isChampionMarker) {
+      // Recreate champion marker
+      createChampionMarkerFromData(objData);
+    } else if (objData.isMinion) {
+      createMinionMarker(objData.left, objData.top, objData.minionTeam);
+    } else if (objData.isWard) {
+      createWardFromData(objData);
+    }
+  }
+
+  /**
+   * Create champion marker from sync data
+   */
+  function createChampionMarkerFromData(data) {
+    const colors = {
+      blue: { stroke: '#3b82f6', fill: '#1e3a5f' },
+      red: { stroke: '#ef4444', fill: '#5f1e1e' },
+    };
+    const color = colors[data.team] || colors.blue;
+    const BASE_RADIUS = data.baseRadius || 16;
+
+    const markerProps = {
+      left: data.left,
+      top: data.top,
+      originX: 'center',
+      originY: 'center',
+      selectable: true,
+      evented: true,
+      hasControls: false,
+      hasBorders: true,
+      lockScalingX: true,
+      lockScalingY: true,
+      lockRotation: true,
+      scaleX: data.scaleX || 1,
+      scaleY: data.scaleY || 1,
+    };
+
+    const addMarker = (marker) => {
+      marker.team = data.team;
+      marker.isChampionMarker = true;
+      marker.championId = data.championId || null;
+      marker.baseRadius = BASE_RADIUS;
+      marker.isRemoteMarker = true; // Mark as remote so we don't hide toolbar markers
+      canvas.add(marker);
+    };
+
+    if (data.championId && championImageCache[data.championId]) {
+      fabric.Image.fromURL(championImageCache[data.championId], function(clippedImg) {
+        const imgScale = (BASE_RADIUS * 2) / 120;
+        clippedImg.set({
+          originX: 'center',
+          originY: 'center',
+          scaleX: imgScale,
+          scaleY: imgScale,
+        });
+        const border = new fabric.Circle({
+          radius: BASE_RADIUS + 1,
+          fill: 'transparent',
+          stroke: color.stroke,
+          strokeWidth: 3,
+          originX: 'center',
+          originY: 'center',
+        });
+        const group = new fabric.Group([clippedImg, border], markerProps);
+        addMarker(group);
+      });
+    } else {
+      const circle = new fabric.Circle({
+        ...markerProps,
+        radius: BASE_RADIUS,
+        fill: color.fill,
+        stroke: color.stroke,
+        strokeWidth: 3,
+      });
+      addMarker(circle);
+    }
+  }
+
+  /**
+   * Create ward from sync data
+   */
+  function createWardFromData(data) {
+    const wardType = data.wardType || 'green';
+    const radius = 6;
+    const wardColor = wardType === 'green' ? '#22c55e' : '#ec4899';
+    
+    const ward = new fabric.Circle({
+      left: data.left,
+      top: data.top,
+      radius: radius,
+      fill: wardColor,
+      stroke: '#ffffff',
+      strokeWidth: 2,
+      originX: 'center',
+      originY: 'center',
+      selectable: true,
+      evented: true,
+      scaleX: data.scaleX || 1,
+      scaleY: data.scaleY || 1,
+    });
+    
+    ward.isWard = true;
+    ward.wardType = wardType;
+    canvas.add(ward);
+  }
+
+  /**
+   * Apply remote tower states
+   */
+  function applyRemoteTowerStates(towers) {
+    if (!canvas) return;
+    
+    isRemoteUpdate = true;
+    
+    canvas.getObjects().forEach(obj => {
+      if (obj.isTower) {
+        const key = `${obj.towerTeam}_${obj.towerIndex}`;
+        const towerState = towers[key];
+        
+        if (towerState && towerState.updatedBy !== userId) {
+          obj.isDestroyed = towerState.isDestroyed;
+          const objects = obj.getObjects();
+          const redX = objects[2];
+          if (redX) {
+            redX.set('visible', obj.isDestroyed);
+          }
+        }
+      }
+    });
+    
+    canvas.renderAll();
+    isRemoteUpdate = false;
+  }
+
+  /**
+   * Apply remote objective states
+   */
+  function applyRemoteObjectiveStates(objectives) {
+    if (!canvas) return;
+    
+    isRemoteUpdate = true;
+    
+    canvas.getObjects().forEach(obj => {
+      if (obj.isObjective) {
+        const objState = objectives[obj.objectiveType];
+        
+        if (objState && objState.updatedBy !== userId) {
+          obj.isDestroyed = objState.isDestroyed;
+          const objects = obj.getObjects();
+          const redX = objects[2];
+          if (redX) {
+            redX.set('visible', obj.isDestroyed);
+          }
+        }
+      }
+    });
+    
+    canvas.renderAll();
+    isRemoteUpdate = false;
+  }
+
+  /**
+   * Reset all towers (for new room)
+   */
+  function resetAllTowers() {
+    if (!canvas) return;
+    
+    canvas.getObjects().forEach(obj => {
+      if (obj.isTower) {
+        obj.isDestroyed = false;
+        const objects = obj.getObjects();
+        const redX = objects[2];
+        if (redX) {
+          redX.set('visible', false);
+        }
+      }
+    });
+    
+    canvas.renderAll();
+  }
+
+  /**
+   * Reset all objectives (for new room)
+   */
+  function resetAllObjectives() {
+    if (!canvas) return;
+    
+    canvas.getObjects().forEach(obj => {
+      if (obj.isObjective) {
+        obj.isDestroyed = false;
+        const objects = obj.getObjects();
+        const redX = objects[2];
+        if (redX) {
+          redX.set('visible', false);
+        }
+      }
+    });
+    
+    canvas.renderAll();
+  }
+
   // Calculate canvas size to fill the entire viewport
   function getCanvasSize() {
     return {
@@ -210,6 +852,19 @@
         opt.path.selectable = false;
         // Save the path for undo (undo will remove it)
         saveStateForAdd(opt.path);
+        // Sync to Firebase
+        syncCanvasToFirebase();
+      });
+
+      // Sync on object modifications
+      canvas.on('object:modified', function () {
+        syncCanvasToFirebase();
+      });
+
+      canvas.on('object:removed', function () {
+        if (!isRemoteUpdate) {
+          syncCanvasToFirebase();
+        }
       });
 
       // Set up tools
@@ -220,6 +875,9 @@
       if (colorIndicator) {
         colorIndicator.style.background = currentBrushColor;
       }
+
+      // Initialize collaboration after canvas is ready
+      initCollaboration();
 
       console.log('Map ready');
     };
@@ -338,6 +996,8 @@
       if (isErasing && erasedObjectsInStroke.length > 0) {
         // Save all erased objects for undo (undo will add them back)
         saveStateForRemove(erasedObjectsInStroke);
+        // Sync to Firebase
+        syncCanvasToFirebase();
       }
       isErasing = false;
       erasedObjectsInStroke = [];
@@ -422,6 +1082,8 @@
         canvas.add(arrow);
         canvas.renderAll();
         saveStateForAdd(arrow);
+        // Sync to Firebase
+        syncCanvasToFirebase();
       }
 
       arrowPoints = [];
@@ -570,6 +1232,9 @@
       canvas.remove(obj);
     });
     canvas.renderAll();
+    
+    // Sync to Firebase
+    syncCanvasToFirebase();
   }
 
   function recenterMap() {
@@ -849,6 +1514,9 @@
     
     canvas.renderAll();
     isUndoing = false;
+    
+    // Sync to Firebase
+    syncCanvasToFirebase();
   }
 
   function restoreAllToolbarMarkers() {
@@ -1771,6 +2439,9 @@
 
       hideColorPicker();
       setMode('select');
+      
+      // Sync to Firebase
+      syncCanvasToFirebase();
     });
   }
 
@@ -1949,6 +2620,9 @@
 
       hideColorPicker();
       setMode('select');
+      
+      // Sync to Firebase
+      syncCanvasToFirebase();
     });
   }
 
@@ -1956,7 +2630,7 @@
   // Tower System
   // ─────────────────────────────────────────────────────────────
 
-  function createTowerMarker(x, y, team, bgScale) {
+  function createTowerMarker(x, y, team, bgScale, towerIndex) {
     const imgPath = 'image/Turretico.png';
     const baseTowerSize = 32; // Base size at scale 1
     const towerSize = baseTowerSize; // Keep internal calculations at base size
@@ -2052,6 +2726,7 @@
         group.isDestroyed = false;
         group.redXElement = redX;
         group.towerTeam = team;
+        group.towerIndex = towerIndex;
 
         canvas.add(group);
         canvas.renderAll();
@@ -2084,6 +2759,9 @@
         }
         
         canvas.renderAll();
+        
+        // Sync tower state to Firebase
+        syncTowerState(target.towerIndex, target.towerTeam, target.isDestroyed);
       }
       
       // Handle objective toggle (Baron, Elder)
@@ -2100,6 +2778,9 @@
         }
         
         canvas.renderAll();
+        
+        // Sync objective state to Firebase
+        syncObjectiveState(target.objectiveType, target.isDestroyed);
       }
     });
   }
@@ -2179,13 +2860,13 @@
     // Blue team towers (11 total)
     BLUE_TOWERS.forEach((pos, index) => {
       const scaled = getScaledTowerPosition(pos.x, pos.y);
-      createTowerMarker(scaled.x, scaled.y, 'blue', bgScale);
+      createTowerMarker(scaled.x, scaled.y, 'blue', bgScale, index);
     });
     
     // Red team towers (11 total)
     RED_TOWERS.forEach((pos, index) => {
       const scaled = getScaledTowerPosition(pos.x, pos.y);
-      createTowerMarker(scaled.x, scaled.y, 'red', bgScale);
+      createTowerMarker(scaled.x, scaled.y, 'red', bgScale, index);
     });
   }
 
@@ -2379,6 +3060,9 @@
 
       hideColorPicker();
       setMode('select');
+      
+      // Sync to Firebase
+      syncCanvasToFirebase();
     });
   }
 

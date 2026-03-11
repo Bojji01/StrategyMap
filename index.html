@@ -217,7 +217,69 @@
       <div class="shortcut-item"><span class="shortcut-key scroll-icon">⇅</span> Zoom</div>
     </div>
 
+    <!-- Collaboration UI -->
+    <div id="collabPanel" class="collab-panel">
+      <div id="connectionStatus" class="connection-status offline">
+        <span class="status-dot"></span>
+        <span class="status-text">Offline</span>
+      </div>
+      <button id="shareBtn" class="share-btn" title="Share Map">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="18" cy="5" r="3"/>
+          <circle cx="6" cy="12" r="3"/>
+          <circle cx="18" cy="19" r="3"/>
+          <path d="M8.59 13.51l6.83 3.98"/>
+          <path d="M15.41 6.51l-6.82 3.98"/>
+        </svg>
+        <span>Share</span>
+      </button>
+      <div id="usersOnline" class="users-online" style="display: none;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>
+        <span id="userCount">1</span>
+      </div>
+    </div>
+
+    <!-- Share Modal -->
+    <div id="shareModal" class="share-modal" style="display: none;">
+      <div class="share-modal-content">
+        <div class="share-modal-header">
+          <h3>Share This Map</h3>
+          <button id="closeShareModal" class="close-modal-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20">
+              <path d="M18 6L6 18"/>
+              <path d="M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="share-modal-body">
+          <p>Share this link with others to collaborate in real-time:</p>
+          <div class="share-link-container">
+            <input type="text" id="shareLink" class="share-link-input" readonly>
+            <button id="copyLinkBtn" class="copy-link-btn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+              </svg>
+              <span>Copy</span>
+            </button>
+          </div>
+          <div id="copySuccess" class="copy-success" style="display: none;">Link copied to clipboard!</div>
+        </div>
+        <div class="share-modal-footer">
+          <button id="newRoomBtn" class="new-room-btn">Create New Room</button>
+        </div>
+      </div>
+    </div>
+
     <script src="vendor/fabric.min.js"></script>
-    <script src="app.js?v=56"></script>
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="app.js?v=57"></script>
   </body>
 </html>
