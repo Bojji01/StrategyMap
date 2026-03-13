@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Draft Pick/Ban</title>
+    <link rel="stylesheet" href="styles.css?v=11" />
+    <link rel="stylesheet" href="draft.css?v=2" />
+  </head>
+  <body>
+    <nav class="top-nav">
+      <div class="nav-brand">StrategyHub</div>
+      <div class="nav-links">
+        <a href="index.html" class="nav-link">Strategy Map</a>
+        <a href="draft.html" class="nav-link active">Draft Pick/Ban</a>
+      </div>
+    </nav>
+
+    <!-- Mode Selection Modal -->
+    <div id="modeModal" class="mode-modal" style="display:none;">
+      <div class="mode-modal-content">
+        <h2 class="mode-modal-title">Select Draft Mode</h2>
+        <p class="mode-modal-desc">Choose the draft format for this session</p>
+        <div class="mode-options">
+          <button class="mode-option" data-mode="normal">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+                <path d="M2 17l10 5 10-5"/>
+                <path d="M2 12l10 5 10-5"/>
+              </svg>
+            </div>
+            <h3>Normal Draft</h3>
+            <p>Standard pick/ban format. Each team bans 5 champions and picks 5 champions in alternating order.</p>
+          </button>
+          <button class="mode-option" data-mode="fearless">
+            <div class="mode-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <path d="M9 12l2 2 4-4"/>
+              </svg>
+            </div>
+            <h3>Fearless Draft</h3>
+            <p>Champions picked or banned in previous games cannot be picked or banned again. Multi-game series format.</p>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Draft Main Content -->
+    <div class="draft-container" style="display:none;">
+      <!-- Draft Header Info -->
+      <div class="draft-header">
+        <div class="draft-team blue-side">
+          <input class="team-name-input blue-input" value="Blue Team" maxlength="20" />
+          <span class="team-score" id="blueScore">0</span>
+        </div>
+        <div class="draft-info-center">
+          <span class="draft-mode-badge" id="modeBadge">NORMAL</span>
+          <span class="draft-game-label" id="gameLabel">Game 1</span>
+          <div class="draft-phase" id="phaseLabel">Ban Phase 1</div>
+          <div class="draft-timer" id="draftTimer">30</div>
+        </div>
+        <div class="draft-team red-side">
+          <span class="team-score" id="redScore">0</span>
+          <input class="team-name-input red-input" value="Red Team" maxlength="20" />
+        </div>
+      </div>
+
+      <!-- Draft Board -->
+      <div class="draft-board">
+        <!-- Blue Side -->
+        <div class="team-column blue-column">
+          <div class="ban-row">
+            <div class="ban-slot" data-team="blue" data-index="0"></div>
+            <div class="ban-slot" data-team="blue" data-index="1"></div>
+            <div class="ban-slot" data-team="blue" data-index="2"></div>
+            <div class="ban-slot" data-team="blue" data-index="3"></div>
+            <div class="ban-slot" data-team="blue" data-index="4"></div>
+          </div>
+          <div class="pick-column">
+            <div class="pick-slot" data-team="blue" data-index="0"><span class="pick-role">B1</span></div>
+            <div class="pick-slot" data-team="blue" data-index="1"><span class="pick-role">B2</span></div>
+            <div class="pick-slot" data-team="blue" data-index="2"><span class="pick-role">B3</span></div>
+            <div class="pick-slot" data-team="blue" data-index="3"><span class="pick-role">B4</span></div>
+            <div class="pick-slot" data-team="blue" data-index="4"><span class="pick-role">B5</span></div>
+          </div>
+        </div>
+
+        <!-- Champion Pool Center -->
+        <div class="champion-pool">
+          <input type="text" id="draftChampSearch" class="draft-champ-search" placeholder="Search champions..." />
+          <div class="role-filters">
+            <button class="role-filter active" data-role="all">All</button>
+            <button class="role-filter" data-role="top">Top</button>
+            <button class="role-filter" data-role="jungle">Jungle</button>
+            <button class="role-filter" data-role="mid">Mid</button>
+            <button class="role-filter" data-role="bot">Bot</button>
+            <button class="role-filter" data-role="support">Support</button>
+          </div>
+          <div id="draftChampGrid" class="draft-champ-grid">
+            <!-- Champions populated by JS -->
+          </div>
+        </div>
+
+        <!-- Red Side -->
+        <div class="team-column red-column">
+          <div class="ban-row">
+            <div class="ban-slot" data-team="red" data-index="0"></div>
+            <div class="ban-slot" data-team="red" data-index="1"></div>
+            <div class="ban-slot" data-team="red" data-index="2"></div>
+            <div class="ban-slot" data-team="red" data-index="3"></div>
+            <div class="ban-slot" data-team="red" data-index="4"></div>
+          </div>
+          <div class="pick-column">
+            <div class="pick-slot" data-team="red" data-index="0"><span class="pick-role">R1</span></div>
+            <div class="pick-slot" data-team="red" data-index="1"><span class="pick-role">R2</span></div>
+            <div class="pick-slot" data-team="red" data-index="2"><span class="pick-role">R3</span></div>
+            <div class="pick-slot" data-team="red" data-index="3"><span class="pick-role">R4</span></div>
+            <div class="pick-slot" data-team="red" data-index="4"><span class="pick-role">R5</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Controls -->
+      <div class="draft-controls">
+        <button id="lockIn" class="draft-ctrl-btn lock-btn" disabled>Lock In</button>
+        <button id="nextGame" class="draft-ctrl-btn next-game-btn" style="display:none;">Next Game</button>
+      </div>
+
+      <!-- Fearless: Previous games banned champs -->
+      <div id="fearlessHistory" class="fearless-history" style="display:none;">
+        <h4 class="fearless-history-title">Unavailable Champions (Fearless)</h4>
+        <div id="fearlessChampList" class="fearless-champ-list"></div>
+      </div>
+    </div>
+
+    <!-- Share Links Modal (shown after creating a room) -->
+    <div id="shareDraftModal" class="mode-modal" style="display:none;">
+      <div class="mode-modal-content share-draft-modal">
+        <h2 class="mode-modal-title">Share Draft Links</h2>
+        <p class="mode-modal-desc">Send each link to the respective team. The spectator link is view-only.</p>
+        <div class="share-links-list">
+          <div class="share-link-row blue-link-row">
+            <div class="share-link-label">
+              <span class="share-link-dot blue-dot"></span>
+              Blue Team
+            </div>
+            <div class="share-link-field">
+              <input type="text" id="blueLinkInput" class="share-link-input" readonly />
+              <button class="copy-link-btn" data-target="blueLinkInput">Copy</button>
+            </div>
+          </div>
+          <div class="share-link-row red-link-row">
+            <div class="share-link-label">
+              <span class="share-link-dot red-dot"></span>
+              Red Team
+            </div>
+            <div class="share-link-field">
+              <input type="text" id="redLinkInput" class="share-link-input" readonly />
+              <button class="copy-link-btn" data-target="redLinkInput">Copy</button>
+            </div>
+          </div>
+          <div class="share-link-row spec-link-row">
+            <div class="share-link-label">
+              <span class="share-link-dot spec-dot"></span>
+              Spectator
+            </div>
+            <div class="share-link-field">
+              <input type="text" id="specLinkInput" class="share-link-input" readonly />
+              <button class="copy-link-btn" data-target="specLinkInput">Copy</button>
+            </div>
+          </div>
+        </div>
+        <button id="startDraftBtn" class="draft-ctrl-btn lock-btn" style="margin-top:20px;width:100%;justify-content:center;">Start Draft</button>
+      </div>
+    </div>
+
+    <!-- Role indicator banner -->
+    <div id="roleBanner" class="role-banner" style="display:none;"></div>
+
+    <!-- Ready Check Screen -->
+    <div id="readyScreen" class="mode-modal" style="display:none;">
+      <div class="mode-modal-content ready-screen-content">
+        <h2 class="mode-modal-title">Ready Check</h2>
+        <p class="mode-modal-desc" id="readyDesc">Both teams must be ready to start the draft</p>
+        <div class="ready-mode-info">
+          <span class="draft-mode-badge" id="readyModeBadge">NORMAL</span>
+          <span id="readyGameLabel" style="font-size:12px;color:#8892a8;">Game 1</span>
+        </div>
+        <div class="ready-players">
+          <div class="ready-player blue-ready-player" id="blueReadyBox">
+            <div class="ready-player-dot blue-dot"></div>
+            <span class="ready-player-name">Blue Team</span>
+            <span class="ready-status" id="blueReadyStatus">Not Ready</span>
+          </div>
+          <div class="ready-player red-ready-player" id="redReadyBox">
+            <div class="ready-player-dot red-dot"></div>
+            <span class="ready-player-name">Red Team</span>
+            <span class="ready-status" id="redReadyStatus">Not Ready</span>
+          </div>
+        </div>
+        <button id="readyBtn" class="draft-ctrl-btn lock-btn ready-btn" style="margin-top:20px;width:100%;justify-content:center;">Ready</button>
+        <p id="readyWaitMsg" class="ready-wait-msg" style="display:none;">Waiting for both teams...</p>
+      </div>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+    <script src="draft.js?v=4"></script>
+  </body>
+</html>
