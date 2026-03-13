@@ -681,6 +681,12 @@
       const data = await res.json();
       champions = Object.values(data.data).sort((a, b) => a.name.localeCompare(b.name));
       renderChampionGrid();
+
+      // Preload all champion images into browser cache
+      champions.forEach(champ => {
+        const img = new Image();
+        img.src = getChampImgUrl(champ.id);
+      });
     } catch (e) {
       console.error('Failed to load champions', e);
     }
@@ -733,7 +739,6 @@
       const img = document.createElement('img');
       img.src = getChampImgUrl(champ.id);
       img.alt = champ.name;
-      img.loading = 'lazy';
       cell.appendChild(img);
 
       const nameEl = document.createElement('div');
