@@ -14,6 +14,24 @@ body {
   overflow: hidden;
 }
 
+/* Site Disclaimer Footer */
+.site-disclaimer {
+  width: 100%;
+  background: #0a0d14;
+  border-top: 1px solid #1a1f2e;
+  padding: 10px 20px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.site-disclaimer p {
+  font-size: 10px;
+  color: #555a6a;
+  line-height: 1.4;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
 /* Top Navigation Bar */
 .top-nav {
   width: 100%;

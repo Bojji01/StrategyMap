@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Champions — StrategyHub</title>
+    <link rel="stylesheet" href="styles.css?v=11" />
+    <link rel="stylesheet" href="champions.css?v=1" />
+  </head>
+  <body>
+    <nav class="top-nav">
+      <div class="nav-brand">StrategyHub</div>
+      <div class="nav-links">
+        <a href="index.html" class="nav-link">Strategy Map</a>
+        <a href="draft.html" class="nav-link">Draft Pick/Ban</a>
+        <a href="tierlist.html" class="nav-link">Leaderboard</a>
+        <a href="champions.html" class="nav-link active">Champions</a>
+      </div>
+    </nav>
+
+    <div class="champ-container">
+      <!-- Controls -->
+      <div class="champ-controls">
+        <div class="controls-left">
+          <label class="control-label" for="regionSelect">Region</label>
+          <select id="regionSelect" class="control-select">
+            <option value="na1">NA</option>
+            <option value="euw1">EUW</option>
+            <option value="eun1">EUNE</option>
+            <option value="kr">KR</option>
+            <option value="br1">BR</option>
+            <option value="la1" selected>LAS</option>
+            <option value="la2">LAN</option>
+            <option value="jp1">JP</option>
+            <option value="oc1">OCE</option>
+            <option value="tr1">TR</option>
+            <option value="ru">RU</option>
+          </select>
+          <label class="control-label" for="tierSelect">Tier</label>
+          <select id="tierSelect" class="control-select">
+            <option value="challenger">Challenger</option>
+            <option value="grandmaster">Grandmaster</option>
+            <option value="master">Master</option>
+          </select>
+          <button id="analyzeBtn" class="control-btn">Analyze Meta</button>
+        </div>
+        <div class="controls-right">
+          <select id="sortSelect" class="control-select">
+            <option value="games">Sort: Games</option>
+            <option value="pickRate">Sort: Pick Rate</option>
+            <option value="winRate">Sort: Win Rate</option>
+            <option value="kda">Sort: KDA</option>
+          </select>
+          <input type="text" id="champSearch" class="control-search" placeholder="Search champion..." />
+        </div>
+      </div>
+
+      <!-- Summary -->
+      <div id="metaSummary" class="meta-summary" style="display:none;">
+        <div class="meta-info">
+          <span id="metaTier" class="meta-badge"></span>
+          <span class="meta-detail">Based on top <strong id="metaSample">10</strong> players · <strong id="metaGames">0</strong> games analyzed</span>
+        </div>
+      </div>
+
+      <!-- Loading -->
+      <div id="loadingState" class="loading-state" style="display:none;">
+        <div class="spinner"></div>
+        <p>Analyzing match data from top players…</p>
+        <p class="loading-sub">This may take 15–30 seconds (fetching match history)</p>
+      </div>
+
+      <!-- Error -->
+      <div id="errorState" class="error-state" style="display:none;">
+        <p id="errorMessage"></p>
+      </div>
+
+      <!-- Champion Table -->
+      <div id="champTableWrap" class="champ-table-wrap" style="display:none;">
+        <table class="champ-table">
+          <thead>
+            <tr>
+              <th class="col-idx">#</th>
+              <th class="col-champ">Champion</th>
+              <th class="col-games">Games</th>
+              <th class="col-pick">Pick %</th>
+              <th class="col-wr">Win %</th>
+              <th class="col-kda">KDA</th>
+            </tr>
+          </thead>
+          <tbody id="champTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <footer class="site-disclaimer">
+      <p>Strategygg isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends &copy; Riot Games, Inc.</p>
+    </footer>
+
+    <script src="champions.js?v=1"></script>
+  </body>
+</html>
