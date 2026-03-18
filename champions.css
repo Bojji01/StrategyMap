@@ -1,0 +1,316 @@
+/* ========================================
+   Tier List Page — LoLalytics-inspired
+   ======================================== */
+
+.tl-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 24px 40px;
+  gap: 0;
+}
+.tl-container::-webkit-scrollbar { width: 6px; }
+.tl-container::-webkit-scrollbar-track { background: transparent; }
+.tl-container::-webkit-scrollbar-thumb { background: #2a3040; border-radius: 3px; }
+
+/* ── Page Header ────────────────────── */
+.tl-header {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.tl-title {
+  font-size: 28px;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: #f2f4f8;
+  margin: 0;
+}
+.tl-patch {
+  font-size: 14px;
+  font-weight: 600;
+  color: #8892a8;
+  margin: 4px 0 0;
+  letter-spacing: 1px;
+}
+
+/* ── Lane Filter Tabs ───────────────── */
+.tl-lane-tabs {
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 16px;
+  background: #141820;
+  border-radius: 10px;
+  padding: 6px;
+  border: 1px solid #2a3040;
+}
+.lane-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  color: #8892a8;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.lane-tab:hover { background: #1e2536; color: #c8d0e0; }
+.lane-tab.active {
+  background: #3b82f6;
+  color: #fff;
+}
+
+/* ── Filters Bar ────────────────────── */
+.tl-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.tl-filters-left, .tl-filters-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Rank pills */
+.rank-pills {
+  display: flex;
+  gap: 4px;
+  background: #141820;
+  border-radius: 8px;
+  padding: 4px;
+  border: 1px solid #2a3040;
+}
+.rank-pill {
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: #8892a8;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.rank-pill:hover { background: #1e2536; color: #c8d0e0; }
+.rank-pill.active { background: #2a3040; color: #f2f4f8; }
+.rank-pill.active[data-rank="emerald"] { background: #34d39930; color: #34d399; }
+.rank-pill.active[data-rank="diamond"] { background: #60a5fa30; color: #60a5fa; }
+.rank-pill.active[data-rank="master"] { background: #a855f730; color: #a855f7; }
+.rank-pill.active[data-rank="grandmaster"] { background: #ef444430; color: #ef4444; }
+.rank-pill.active[data-rank="challenger"] { background: #f59e0b30; color: #f59e0b; }
+
+/* Selects & search */
+.tl-select {
+  background: #141820;
+  color: #f2f4f8;
+  border: 1px solid #2a3040;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  outline: none;
+}
+.tl-select:focus { border-color: #3b82f6; }
+.tl-search {
+  background: #141820;
+  color: #f2f4f8;
+  border: 1px solid #2a3040;
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  width: 160px;
+  outline: none;
+}
+.tl-search:focus { border-color: #3b82f6; }
+.tl-search::placeholder { color: #555d70; }
+
+/* ── Summary Bar ────────────────────── */
+.tl-summary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px 20px;
+  margin-bottom: 12px;
+  background: #141820;
+  border-radius: 8px;
+  border: 1px solid #2a3040;
+  font-size: 13px;
+  color: #8892a8;
+}
+.summary-stat strong { color: #f2f4f8; }
+.summary-sep { color: #2a3040; }
+
+/* ── Loading / Error ────────────────── */
+.tl-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 80px 0;
+  color: #8892a8;
+  font-size: 14px;
+}
+.loading-sub { font-size: 12px; color: #555d70; }
+.spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid #2a3040;
+  border-top-color: #3b82f6;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.tl-error {
+  padding: 40px 0;
+  text-align: center;
+  color: #ef4444;
+  font-size: 14px;
+}
+
+/* ── Tier List Table ────────────────── */
+.tl-table-wrap {
+  background: #141820;
+  border-radius: 10px;
+  border: 1px solid #2a3040;
+  overflow: hidden;
+}
+.tl-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tl-table thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.tl-table th {
+  background: #1a1e2a;
+  color: #8892a8;
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 14px;
+  border-bottom: 2px solid #2a3040;
+  white-space: nowrap;
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s;
+}
+.tl-table th:hover { color: #f2f4f8; }
+.tl-table th.sort-active { color: #3b82f6; }
+
+.th-rank { width: 46px; text-align: center; }
+.th-champ { min-width: 180px; }
+.th-tier { width: 56px; text-align: center; }
+.th-lane { width: 56px; text-align: center; }
+.th-wr { width: 80px; text-align: center; }
+.th-pick { width: 80px; text-align: center; }
+.th-ban { width: 80px; text-align: center; }
+.th-games { width: 80px; text-align: center; }
+
+.tl-table td {
+  padding: 8px 14px;
+  border-bottom: 1px solid #1e2536;
+  color: #c8d0e0;
+  white-space: nowrap;
+}
+.tl-table tbody tr { transition: background 0.1s; }
+.tl-table tbody tr:hover { background: #1a1e2a; }
+.tl-table tbody tr.search-hl { background: #1e2a40; }
+
+/* Rank column */
+.td-rank { text-align: center; color: #555d70; font-weight: 700; font-size: 12px; }
+
+/* Champion cell */
+.champ-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.champ-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 2px solid #2a3040;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.champ-name {
+  font-weight: 600;
+  color: #f2f4f8;
+  font-size: 13px;
+}
+
+/* Tier badge */
+.tier-badge {
+  display: inline-block;
+  width: 32px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  padding: 3px 0;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+}
+.tier-s-plus { background: #f59e0b28; color: #f59e0b; }
+.tier-s      { background: #f59e0b1a; color: #f5b74e; }
+.tier-s-minus{ background: #eab3081a; color: #eab308; }
+.tier-a-plus { background: #22c55e1a; color: #22c55e; }
+.tier-a      { background: #22c55e14; color: #4ade80; }
+.tier-a-minus{ background: #22c55e10; color: #86efac; }
+.tier-b      { background: #3b82f614; color: #60a5fa; }
+.tier-c      { background: #f9731614; color: #fb923c; }
+.tier-d      { background: #ef44441a; color: #ef4444; }
+
+/* Lane cell */
+.td-lane { text-align: center; }
+.lane-icon {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: #1e2536;
+  color: #8892a8;
+}
+
+/* Stat cells */
+.td-wr, .td-pick, .td-ban, .td-games { text-align: center; font-size: 13px; }
+
+/* WR coloring */
+.wr-high { color: #22c55e; font-weight: 600; }
+.wr-mid  { color: #eab308; font-weight: 600; }
+.wr-low  { color: #ef4444; font-weight: 600; }
+
+/* Pick/Ban coloring */
+.ban-high { color: #ef4444; }
+
+/* Games column */
+.td-games { color: #8892a8; }
+
+/* ── Responsive ─────────────────────── */
+@media (max-width: 900px) {
+  .tl-container { padding: 12px 12px; }
+  .tl-filters { flex-direction: column; align-items: stretch; }
+  .tl-filters-left, .tl-filters-right { width: 100%; }
+  .rank-pills { flex-wrap: wrap; }
+  .tl-search { width: 100%; }
+  .th-ban, .td-ban { display: none; }
+  .th-games, .td-games { display: none; }
+}

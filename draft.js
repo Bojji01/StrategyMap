@@ -7,7 +7,7 @@
   'use strict';
 
   // Data Dragon
-  const DDRAGON_VERSION = '14.24.1';
+  const DDRAGON_VERSION = '16.6.1';
   const DDRAGON_BASE = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}`;
 
   // Firebase configuration (same as strategy map)

@@ -3,9 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Champions — StrategyHub</title>
+    <title>Tier List — StrategyHub</title>
     <link rel="stylesheet" href="styles.css?v=11" />
-    <link rel="stylesheet" href="champions.css?v=1" />
+    <link rel="stylesheet" href="champions.css?v=3" />
   </head>
   <body>
     <nav class="top-nav">
@@ -13,17 +13,57 @@
       <div class="nav-links">
         <a href="index.html" class="nav-link">Strategy Map</a>
         <a href="draft.html" class="nav-link">Draft Pick/Ban</a>
-        <a href="tierlist.html" class="nav-link">Leaderboard</a>
-        <a href="champions.html" class="nav-link active">Champions</a>
+        <a href="leaderboard.html" class="nav-link">Leaderboard</a>
+        <a href="champions.html" class="nav-link active">Tier List</a>
+        <a href="search.html" class="nav-link">Search</a>
       </div>
     </nav>
 
-    <div class="champ-container">
-      <!-- Controls -->
-      <div class="champ-controls">
-        <div class="controls-left">
-          <label class="control-label" for="regionSelect">Region</label>
-          <select id="regionSelect" class="control-select">
+    <div class="api-warning">⚠ Waiting for the Riot API — sorry for the inconvenience.</div>
+
+    <div class="tl-container">
+      <!-- Page Header -->
+      <div class="tl-header">
+        <h1 class="tl-title">LOL TIER LIST</h1>
+        <h2 class="tl-patch" id="patchTitle">LEAGUE OF LEGENDS</h2>
+      </div>
+
+      <!-- Lane Filter Tabs -->
+      <div class="tl-lane-tabs">
+        <button class="lane-tab active" data-lane="ALL">
+          <span class="lane-label">ALL</span>
+        </button>
+        <button class="lane-tab" data-lane="TOP">
+          <span class="lane-label">TOP</span>
+        </button>
+        <button class="lane-tab" data-lane="JUNGLE">
+          <span class="lane-label">JNG</span>
+        </button>
+        <button class="lane-tab" data-lane="MID">
+          <span class="lane-label">MID</span>
+        </button>
+        <button class="lane-tab" data-lane="BOT">
+          <span class="lane-label">BOT</span>
+        </button>
+        <button class="lane-tab" data-lane="SUP">
+          <span class="lane-label">SUP</span>
+        </button>
+      </div>
+
+      <!-- Filters Bar -->
+      <div class="tl-filters">
+        <div class="tl-filters-left">
+          <!-- Rank pills -->
+          <div class="rank-pills">
+            <button class="rank-pill active" data-rank="emerald">Emerald+</button>
+            <button class="rank-pill" data-rank="diamond">Diamond+</button>
+            <button class="rank-pill" data-rank="master">Master+</button>
+            <button class="rank-pill" data-rank="grandmaster">GM+</button>
+            <button class="rank-pill" data-rank="challenger">Challenger</button>
+          </div>
+        </div>
+        <div class="tl-filters-right">
+          <select id="regionSelect" class="tl-select">
             <option value="na1">NA</option>
             <option value="euw1">EUW</option>
             <option value="eun1">EUNE</option>
@@ -36,67 +76,60 @@
             <option value="tr1">TR</option>
             <option value="ru">RU</option>
           </select>
-          <label class="control-label" for="tierSelect">Tier</label>
-          <select id="tierSelect" class="control-select">
-            <option value="challenger">Challenger</option>
-            <option value="grandmaster">Grandmaster</option>
-            <option value="master">Master</option>
+          <select id="patchSelect" class="tl-select">
+            <option value="">All Patches</option>
           </select>
-          <button id="analyzeBtn" class="control-btn">Analyze Meta</button>
-        </div>
-        <div class="controls-right">
-          <select id="sortSelect" class="control-select">
-            <option value="games">Sort: Games</option>
-            <option value="pickRate">Sort: Pick Rate</option>
-            <option value="winRate">Sort: Win Rate</option>
-            <option value="kda">Sort: KDA</option>
-          </select>
-          <input type="text" id="champSearch" class="control-search" placeholder="Search champion..." />
+          <input type="text" id="champSearch" class="tl-search" placeholder="Search champion..." />
         </div>
       </div>
 
-      <!-- Summary -->
-      <div id="metaSummary" class="meta-summary" style="display:none;">
-        <div class="meta-info">
-          <span id="metaTier" class="meta-badge"></span>
-          <span class="meta-detail">Based on top <strong id="metaSample">10</strong> players · <strong id="metaGames">0</strong> games analyzed</span>
-        </div>
+      <!-- Summary Bar -->
+      <div id="summaryBar" class="tl-summary" style="display:none;">
+        <span class="summary-stat">Average Win Rate: <strong id="avgWinRate">50.00%</strong></span>
+        <span class="summary-sep">·</span>
+        <span class="summary-stat">Champions Analysed: <strong id="totalChampions">0</strong></span>
+        <span class="summary-sep">·</span>
+        <span class="summary-stat">Games: <strong id="totalGames">0</strong></span>
+        <span class="summary-sep">·</span>
+        <span class="summary-stat">Players Sampled: <strong id="sampleSize">0</strong></span>
       </div>
 
       <!-- Loading -->
-      <div id="loadingState" class="loading-state" style="display:none;">
+      <div id="loadingState" class="tl-loading" style="display:none;">
         <div class="spinner"></div>
-        <p>Analyzing match data from top players…</p>
-        <p class="loading-sub">This may take 15–30 seconds (fetching match history)</p>
+        <p>Fetching tier list data…</p>
+        <p class="loading-sub">Sampling top players and analyzing their recent games</p>
       </div>
 
       <!-- Error -->
-      <div id="errorState" class="error-state" style="display:none;">
+      <div id="errorState" class="tl-error" style="display:none;">
         <p id="errorMessage"></p>
       </div>
 
-      <!-- Champion Table -->
-      <div id="champTableWrap" class="champ-table-wrap" style="display:none;">
-        <table class="champ-table">
+      <!-- Tier List Table -->
+      <div id="tableWrap" class="tl-table-wrap" style="display:none;">
+        <table class="tl-table">
           <thead>
             <tr>
-              <th class="col-idx">#</th>
-              <th class="col-champ">Champion</th>
-              <th class="col-games">Games</th>
-              <th class="col-pick">Pick %</th>
-              <th class="col-wr">Win %</th>
-              <th class="col-kda">KDA</th>
+              <th class="th-rank">#</th>
+              <th class="th-champ">Champion</th>
+              <th class="th-tier">Tier</th>
+              <th class="th-lane">Lane</th>
+              <th class="th-wr">Win %</th>
+              <th class="th-pick">Pick %</th>
+              <th class="th-ban">Ban %</th>
+              <th class="th-games">Games</th>
             </tr>
           </thead>
-          <tbody id="champTableBody"></tbody>
+          <tbody id="tableBody"></tbody>
         </table>
       </div>
     </div>
 
     <footer class="site-disclaimer">
-      <p>Strategygg isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends &copy; Riot Games, Inc.</p>
+      <p>StrategyHub isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends &copy; Riot Games, Inc.</p>
     </footer>
 
-    <script src="champions.js?v=1"></script>
+    <script src="champions.js?v=3"></script>
   </body>
 </html>

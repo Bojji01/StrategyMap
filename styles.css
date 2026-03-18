@@ -14,6 +14,18 @@ body {
   overflow: hidden;
 }
 
+/* API Warning Banner */
+.api-warning {
+  width: 100%;
+  background: #2a1a00;
+  border-bottom: 1px solid #f59e0b33;
+  color: #f59e0b;
+  text-align: center;
+  font-size: 11px;
+  padding: 4px 12px;
+  flex-shrink: 0;
+}
+
 /* Site Disclaimer Footer */
 .site-disclaimer {
   width: 100%;

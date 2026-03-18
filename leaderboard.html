@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Leaderboard — StrategyHub</title>
+    <link rel="stylesheet" href="styles.css?v=11" />
+    <link rel="stylesheet" href="leaderboard.css?v=2" />
+  </head>
+  <body>
+    <nav class="top-nav">
+      <div class="nav-brand">StrategyHub</div>
+      <div class="nav-links">
+        <a href="index.html" class="nav-link">Strategy Map</a>
+        <a href="draft.html" class="nav-link">Draft Pick/Ban</a>
+        <a href="leaderboard.html" class="nav-link active">Leaderboard</a>
+        <a href="champions.html" class="nav-link">Champions</a>
+        <a href="search.html" class="nav-link">Search</a>
+      </div>
+    </nav>
+
+    <div class="api-warning">⚠ Waiting for the Riot API — sorry for the inconvenience.</div>
+
+    <div class="leaderboard-container">
+      <!-- Controls bar -->
+      <div class="leaderboard-controls">
+        <div class="controls-left">
+          <label class="control-label" for="regionSelect">Region</label>
+          <select id="regionSelect" class="control-select">
+            <option value="br1" selected>BR</option>
+            <option value="na1">NA</option>
+            <option value="euw1">EUW</option>
+            <option value="eun1">EUNE</option>
+            <option value="kr">KR</option>
+            <option value="la1">LAS</option>
+            <option value="la2">LAN</option>
+            <option value="jp1">JP</option>
+            <option value="oc1">OCE</option>
+            <option value="tr1">TR</option>
+            <option value="ru">RU</option>
+            <option value="ph2">PH</option>
+            <option value="sg2">SG</option>
+            <option value="th2">TH</option>
+            <option value="tw2">TW</option>
+            <option value="vn2">VN</option>
+          </select>
+          <label class="control-label" for="tierSelect">Tier</label>
+          <select id="tierSelect" class="control-select tier-selector">
+            <option value="challenger" selected>Challenger</option>
+            <option value="grandmaster">Grandmaster</option>
+            <option value="master">Master</option>
+          </select>
+          <button id="loadBtn" class="control-btn">Load Leaderboard</button>
+        </div>
+        <div class="controls-right">
+          <input type="text" id="playerSearch" class="control-search" placeholder="Search player..." />
+        </div>
+      </div>
+
+      <!-- Summary stat -->
+      <div id="summaryStats" class="summary-stats" style="display:none;">
+        <div class="stat-card" id="statCard">
+          <span class="stat-label" id="statLabel">Challenger</span>
+          <span class="stat-value" id="statValue">—</span>
+        </div>
+      </div>
+
+      <!-- Loading state -->
+      <div id="loadingState" class="loading-state" style="display:none;">
+        <div class="spinner"></div>
+        <p>Fetching leaderboard data from Riot API…</p>
+      </div>
+
+      <!-- Error state -->
+      <div id="errorState" class="error-state" style="display:none;">
+        <p id="errorMessage"></p>
+      </div>
+
+      <!-- Single tier table -->
+      <div id="tableWrap" class="tier-section" style="display:none;">
+        <div class="tier-header" id="tierHeader">
+          <div class="tier-title-group">
+            <span class="tier-icon" id="tierIcon">👑</span>
+            <h2 class="tier-name" id="tierName">Challenger</h2>
+            <span class="tier-count" id="tierCount"></span>
+          </div>
+        </div>
+        <div class="tier-body">
+          <table class="tier-table">
+            <thead>
+              <tr>
+                <th class="col-rank" data-sort="rank">#</th>
+                <th class="col-name" data-sort="name">Summoner</th>
+                <th class="col-lp" data-sort="lp">LP</th>
+                <th class="col-wins" data-sort="wins">W</th>
+                <th class="col-losses" data-sort="losses">L</th>
+                <th class="col-wr" data-sort="wr">WR%</th>
+              </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+        <!-- Pagination -->
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+
+    <footer class="site-disclaimer">
+      <p>Strategygg isn't endorsed by Riot Games and doesn't reflect the views or opinions of Riot Games or anyone officially involved in producing or managing League of Legends. League of Legends and Riot Games are trademarks or registered trademarks of Riot Games, Inc. League of Legends &copy; Riot Games, Inc.</p>
+    </footer>
+
+    <script src="leaderboard.js?v=2"></script>
+  </body>
+</html>
