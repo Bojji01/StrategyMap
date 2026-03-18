@@ -790,6 +790,11 @@ app.get('/api/match-timeline/:matchId', async (req, res) => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`StrategyHub server running at http://localhost:${PORT}`);
-});
+// Only listen when running locally (not on Vercel)
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`StrategyHub server running at http://localhost:${PORT}`);
+  });
+}
+
+module.exports = app;
