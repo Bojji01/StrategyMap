@@ -1,8 +1,10 @@
 require('dotenv').config();
-const express = require('express');
-const path    = require('path');
+const express      = require('express');
+const path         = require('path');
+const cookieParser = require('cookie-parser');
 const cookieSession = require('cookie-session');
-const passport = require('passport');
+const jwt          = require('jsonwebtoken');
+const passport     = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const db = require('./db');
 
@@ -34,8 +36,27 @@ if (GOOGLE_CONFIGURED) {
 passport.serializeUser((user, done) => done(null, user));
 passport.deserializeUser((user, done) => done(null, user));
 
+const JWT_SECRET = process.env.SESSION_SECRET || 'dev-secret-change-me';
+const JWT_COOKIE = 'auth_jwt';
+
+function issueJwt(res, user) {
+  const token = jwt.sign({ email: user.email, name: user.name }, JWT_SECRET, { expiresIn: '7d' });
+  res.cookie(JWT_COOKIE, token, {
+    httpOnly: true,
+    secure:   !!process.env.VERCEL,
+    sameSite: 'lax',
+    maxAge:   7 * 24 * 60 * 60 * 1000,
+  });
+}
+
+function verifyJwt(req) {
+  const token = req.cookies?.[JWT_COOKIE];
+  if (!token) return null;
+  try { return jwt.verify(token, JWT_SECRET); } catch { return null; }
+}
+
 function requireAuth(req, res, next) {
-  if (req.isAuthenticated()) return next();
+  if (verifyJwt(req)) return next();
   res.status(401).json({ error: 'Unauthorized' });
 }
 
@@ -87,11 +108,13 @@ const REGIONAL_HOSTS = {
 const nameCache = new Map();
 
 app.use(express.json());
+app.use(cookieParser());
 
+// Short-lived session only for OAuth state handshake (5-min TTL)
 app.use(cookieSession({
-  name:     'strategyhub_sess',
+  name:     'strategyhub_oauth',
   keys:     [process.env.SESSION_SECRET || 'dev-secret-change-me'],
-  maxAge:   7 * 24 * 60 * 60 * 1000,
+  maxAge:   5 * 60 * 1000,
   secure:   !!process.env.VERCEL,
   sameSite: 'lax',
   httpOnly: true,
@@ -972,19 +995,21 @@ app.get('/auth/google', (req, res, next) => {
 
 app.get('/auth/google/callback', (req, res, next) => {
   if (!GOOGLE_CONFIGURED) return res.redirect('/ranking.html');
-  passport.authenticate('google', { failureRedirect: '/ranking.html?auth=denied' })(req, res, () => res.redirect('/ranking.html'));
-});
-
-app.post('/auth/logout', (req, res) => {
-  req.logout((err) => {
-    if (err) return res.status(500).json({ error: 'Logout failed' });
-    res.json({ ok: true });
+  passport.authenticate('google', { failureRedirect: '/ranking.html?auth=denied' })(req, res, () => {
+    if (req.user) issueJwt(res, req.user);
+    res.redirect('/ranking.html');
   });
 });
 
+app.post('/auth/logout', (req, res) => {
+  res.clearCookie(JWT_COOKIE);
+  res.json({ ok: true });
+});
+
 app.get('/api/auth/me', (req, res) => {
-  if (!req.isAuthenticated()) return res.json({ admin: false });
-  res.json({ admin: true, email: req.user.email, name: req.user.name });
+  const payload = verifyJwt(req);
+  if (!payload) return res.json({ admin: false });
+  res.json({ admin: true, email: payload.email, name: payload.name });
 });
 
 // ── Sync orphaned elo_cache keys → players table ──
