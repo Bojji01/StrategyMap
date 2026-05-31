@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const path    = require('path');
-const session = require('express-session');
+const cookieSession = require('cookie-session');
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const db = require('./db');
@@ -88,12 +88,22 @@ const nameCache = new Map();
 
 app.use(express.json());
 
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 },
+app.use(cookieSession({
+  name:     'strategyhub_sess',
+  keys:     [process.env.SESSION_SECRET || 'dev-secret-change-me'],
+  maxAge:   7 * 24 * 60 * 60 * 1000,
+  secure:   !!process.env.VERCEL,
+  sameSite: 'lax',
+  httpOnly: true,
 }));
+
+// passport@0.7 + cookie-session compatibility shim
+app.use((req, _res, next) => {
+  if (req.session && !req.session.regenerate) req.session.regenerate = (cb) => cb();
+  if (req.session && !req.session.save)       req.session.save = (cb) => cb();
+  next();
+});
+
 app.use(passport.initialize());
 app.use(passport.session());
 
