@@ -40,6 +40,10 @@
       "dest": "server.js"
     },
     {
+      "src": "/auth/(.*)",
+      "dest": "server.js"
+    },
+    {
       "handle": "filesystem"
     }
   ]
