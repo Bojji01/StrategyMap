@@ -977,6 +977,29 @@ app.get('/api/auth/me', (req, res) => {
   res.json({ admin: true, email: req.user.email, name: req.user.name });
 });
 
+// ── Sync orphaned elo_cache keys → players table ──
+app.post('/api/ranking/sync-cache', requireAuth, async (_req, res) => {
+  const cache   = await db.getEloCache();
+  const players = await db.getPlayers();
+  const existingKeys = new Set(players.map(p => rankingKey(p.name, p.tag, p.region)));
+
+  const added = [];
+  for (const key of Object.keys(cache)) {
+    if (existingKeys.has(key)) continue;
+    // key format: name#tag@region
+    const atIdx   = key.lastIndexOf('@');
+    const region  = key.slice(atIdx + 1);
+    const hashIdx = key.lastIndexOf('#', atIdx);
+    const name    = key.slice(0, hashIdx);
+    const tag     = key.slice(hashIdx + 1, atIdx);
+    if (!PLATFORM_HOSTS[region]) continue;
+    await db.addPlayer(name, tag, region);
+    added.push(key);
+  }
+
+  res.json({ ok: true, added });
+});
+
 // ── Ranking data (public read, protected write) ──
 app.get('/api/ranking/data', async (_req, res) => {
   const [players, notes, goals, eloCache] = await Promise.all([
