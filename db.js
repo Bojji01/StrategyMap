@@ -1,10 +1,11 @@
 const { createClient } = require('@libsql/client');
-const path = require('path');
 const fs = require('fs');
+const path = require('path');
 
-// Local dev → SQLite file. Production (Vercel) → Turso cloud.
+if (!process.env.TURSO_DATABASE_URL) throw new Error('TURSO_DATABASE_URL is required in .env');
+
 const client = createClient({
-  url:       process.env.TURSO_DATABASE_URL || `file:${path.join(__dirname, 'data', 'ranking.db')}`,
+  url:       process.env.TURSO_DATABASE_URL,
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
