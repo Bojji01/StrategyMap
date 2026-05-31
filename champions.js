@@ -4,8 +4,9 @@
 (function () {
   'use strict';
 
-  const DDRAGON_VERSION = '16.6.1';
-  const DDRAGON_BASE = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}`;
+  // Data Dragon — version resolved dynamically inside loadPatches()
+  let DDRAGON_VERSION = '16.6.1'; // fallback
+  let DDRAGON_BASE = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}`;
 
   // DOM refs
   const patchTitle = document.getElementById('patchTitle');
@@ -38,6 +39,10 @@
       const resp = await fetch('https://ddragon.leagueoflegends.com/api/versions.json');
       if (!resp.ok) return;
       const versions = await resp.json();
+      if (versions?.[0]) {
+        DDRAGON_VERSION = versions[0];
+        DDRAGON_BASE = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}`;
+      }
       const seen = new Set();
       const patches = [];
       for (const v of versions) {

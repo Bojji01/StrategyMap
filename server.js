@@ -1,12 +1,47 @@
 require('dotenv').config();
 const express = require('express');
-const path = require('path');
+const path    = require('path');
+const session = require('express-session');
+const passport = require('passport');
+const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const db = require('./db');
+
+// Initialise DB tables on startup (idempotent)
+db.init().catch(err => { console.error('DB init failed:', err.message); process.exit(1); });
 
 const app = express();
 const PORT = 3000;
 
 // Riot API key — loaded from .env
 const RIOT_API_KEY = process.env.RIOT_API_KEY;
+
+// ── Google OAuth auth ─────────────────────────
+const AUTHORIZED_EMAIL = 'kabelando@gmail.com';
+const GOOGLE_CONFIGURED = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+if (GOOGLE_CONFIGURED) {
+  passport.use(new GoogleStrategy({
+    clientID:     process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    callbackURL:  process.env.GOOGLE_CALLBACK_URL || 'http://localhost:3000/auth/google/callback',
+  }, (_accessToken, _refreshToken, profile, done) => {
+    const email = profile.emails?.[0]?.value;
+    if (email !== AUTHORIZED_EMAIL) return done(null, false);
+    done(null, { email, name: profile.displayName });
+  }));
+}
+
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((user, done) => done(null, user));
+
+function requireAuth(req, res, next) {
+  if (req.isAuthenticated()) return next();
+  res.status(401).json({ error: 'Unauthorized' });
+}
+
+function rankingKey(name, tag, region) {
+  return `${name.toLowerCase()}#${tag.toLowerCase()}@${region}`;
+}
 
 // Region routing map: platform → regional host
 const PLATFORM_HOSTS = {
@@ -53,8 +88,22 @@ const nameCache = new Map();
 
 app.use(express.json());
 
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'dev-secret-change-me',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 },
+}));
+app.use(passport.initialize());
+app.use(passport.session());
+
 // Serve static files from current directory
 app.use(express.static(path.join(__dirname)));
+
+// Expose current DDragon version to client pages
+app.get('/api/ddragon-version', (_req, res) => {
+  res.json({ version: currentDDragonVersion });
+});
 
 // Proxy endpoint: /api/league/:tier?region=xx
 // tier = challenger | grandmaster | master
@@ -487,10 +536,19 @@ function normalizeRole(pos) {
 }
 
 // Helper: champion ID → name (loaded from DDragon on startup)
+let currentDDragonVersion = '16.6.1'; // fallback if fetch fails
 let championIdMap = {};
-(async function loadChampionIdMap() {
+(async function initDDragon() {
   try {
-    const resp = await fetch('https://ddragon.leagueoflegends.com/cdn/16.6.1/data/en_US/champion.json');
+    const vResp = await fetch('https://ddragon.leagueoflegends.com/api/versions.json');
+    if (vResp.ok) {
+      const versions = await vResp.json();
+      if (versions?.[0]) currentDDragonVersion = versions[0];
+    }
+  } catch { /* keep fallback version */ }
+
+  try {
+    const resp = await fetch(`https://ddragon.leagueoflegends.com/cdn/${currentDDragonVersion}/data/en_US/champion.json`);
     if (resp.ok) {
       const data = await resp.json();
       for (const [name, info] of Object.entries(data.data)) {
@@ -788,6 +846,193 @@ app.get('/api/match-timeline/:matchId', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch timeline', detail: err.message });
   }
+});
+
+// ── Shared player fetch (used by both GET and POST add) ──
+async function fetchPlayerData(name, tag, region) {
+  const platformHost = PLATFORM_HOSTS[region];
+  const regionalHost = REGIONAL_HOSTS[region];
+  if (!platformHost) return null;
+
+  const account = await riotApiFetch(
+    `https://${regionalHost}/riot/account/v1/accounts/by-riot-id/${encodeURIComponent(name)}/${encodeURIComponent(tag)}`
+  );
+  if (!account) return null;
+  const { puuid, gameName, tagLine } = account;
+
+  const summoner = await riotApiFetch(
+    `https://${platformHost}/lol/summoner/v4/summoners/by-puuid/${encodeURIComponent(puuid)}`
+  );
+
+  const ranked = await riotApiFetch(
+    `https://${platformHost}/lol/league/v4/entries/by-puuid/${encodeURIComponent(puuid)}`
+  );
+  const soloEntry = (ranked || []).find((e) => e.queueType === 'RANKED_SOLO_5x5') || null;
+
+  const startTime = Math.floor((Date.now() - 86400000) / 1000);
+  const matchIds = await riotApiFetch(
+    `https://${regionalHost}/lol/match/v5/matches/by-puuid/${encodeURIComponent(puuid)}/ids?queue=420&startTime=${startTime}&count=100`
+  );
+
+  let wins24h = 0, losses24h = 0;
+  if (matchIds?.length) {
+    const matchUrls = matchIds.map((id) => `https://${regionalHost}/lol/match/v5/matches/${id}`);
+    const matches = await riotFetchBatch(matchUrls, 8, 1500);
+    matches.forEach((m) => {
+      if (!m?.info) return;
+      const p = m.info.participants.find((pt) => pt.puuid === puuid);
+      if (!p) return;
+      p.win ? wins24h++ : losses24h++;
+    });
+  }
+
+  return { puuid, gameName, tagLine, profileIconId: summoner?.profileIconId ?? 0, summonerLevel: summoner?.summonerLevel ?? 0, soloEntry, wins24h, losses24h, updatedAt: Date.now() };
+}
+
+// ── Ranking: single-call player snapshot ──────
+app.get('/api/ranking/player', async (req, res) => {
+  const { name, tag, region = 'br1' } = req.query;
+  if (!name || !tag) return res.status(400).json({ error: 'name and tag are required' });
+  if (!PLATFORM_HOSTS[region]) return res.status(400).json({ error: 'Invalid region' });
+
+  const data = await fetchPlayerData(name, tag, region);
+  if (!data) return res.status(404).json({ error: 'Player not found' });
+
+  // Cache in DB so all visitors benefit
+  const key = rankingKey(name, tag, region);
+  await db.setEloCache(key, data, data.updatedAt);
+
+  // Set entry elo if not yet recorded (only sets if NULL in DB)
+  if (data.soloEntry) {
+    const TIER_LP_BASE = { IRON:0,BRONZE:400,SILVER:800,GOLD:1200,PLATINUM:1600,EMERALD:2000,DIAMOND:2400 };
+    const DIV_LP = { IV:0,III:100,II:200,I:300 };
+    const APEX = new Set(['MASTER','GRANDMASTER','CHALLENGER']);
+    const s = data.soloEntry;
+    const absLp = APEX.has(s.tier) ? 2800+(s.leaguePoints||0) : (TIER_LP_BASE[s.tier]||0)+(DIV_LP[s.rank]||0)+(s.leaguePoints||0);
+    await db.setEntryElo(key, absLp);
+  }
+
+  res.json(data);
+});
+
+// ── Ranking: live game check ───────────────────
+// GET /api/ranking/live?puuid=xxx&region=xx
+app.get('/api/ranking/live', async (req, res) => {
+  const { puuid, region = 'br1' } = req.query;
+  if (!puuid) return res.status(400).json({ error: 'puuid required' });
+
+  const platformHost = PLATFORM_HOSTS[region];
+  if (!platformHost) return res.status(400).json({ error: 'Invalid region' });
+
+  const game = await riotApiFetch(
+    `https://${platformHost}/lol/spectator/v5/active-games/by-summoner/${encodeURIComponent(puuid)}`
+  );
+
+  if (!game || !game.gameId) return res.json({ inGame: false });
+
+  const QUEUE_LABELS = { 420: 'Ranked Solo', 440: 'Ranked Flex', 400: 'Normal Draft', 450: 'ARAM' };
+
+  const participants = (game.participants || []).map((p) => ({
+    puuid:       p.puuid,
+    name:        p.riotId || p.summonerName || 'Unknown',
+    championId:  p.championId,
+    champion:    championIdToName(p.championId) || String(p.championId),
+    teamId:      p.teamId, // 100 = blue, 200 = red
+    spell1Id:    p.spell1Id,
+    spell2Id:    p.spell2Id,
+  }));
+
+  const self = participants.find((p) => p.puuid === puuid);
+
+  res.json({
+    inGame:        true,
+    champion:      self?.champion || null,
+    queueId:       game.gameQueueConfigId,
+    queueLabel:    QUEUE_LABELS[game.gameQueueConfigId] || 'Game',
+    gameStartTime: game.gameStartTime,
+    participants,
+  });
+});
+
+// ── Auth ──────────────────────────────────────
+app.get('/auth/google', (req, res, next) => {
+  if (!GOOGLE_CONFIGURED) return res.status(503).send('Google OAuth not configured — add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to .env');
+  passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next);
+});
+
+app.get('/auth/google/callback', (req, res, next) => {
+  if (!GOOGLE_CONFIGURED) return res.redirect('/ranking.html');
+  passport.authenticate('google', { failureRedirect: '/ranking.html?auth=denied' })(req, res, () => res.redirect('/ranking.html'));
+});
+
+app.post('/auth/logout', (req, res) => {
+  req.logout((err) => {
+    if (err) return res.status(500).json({ error: 'Logout failed' });
+    res.json({ ok: true });
+  });
+});
+
+app.get('/api/auth/me', (req, res) => {
+  if (!req.isAuthenticated()) return res.json({ admin: false });
+  res.json({ admin: true, email: req.user.email, name: req.user.name });
+});
+
+// ── Ranking data (public read, protected write) ──
+app.get('/api/ranking/data', async (_req, res) => {
+  const [players, notes, goals, eloCache] = await Promise.all([
+    db.getPlayers(), db.getNotes(), db.getGoals(), db.getEloCache(),
+  ]);
+  res.json({ players, notes, goals, eloCache });
+});
+
+app.post('/api/ranking/players', requireAuth, async (req, res) => {
+  const { name, tag, region } = req.body;
+  if (!name || !tag || !region) return res.status(400).json({ error: 'Missing fields' });
+  if (!PLATFORM_HOSTS[region]) return res.status(400).json({ error: 'Invalid region' });
+
+  const key = rankingKey(name, tag, region);
+  const players = await db.getPlayers();
+  if (players.find(p => rankingKey(p.name, p.tag, p.region) === key))
+    return res.status(409).json({ error: 'Player already tracked' });
+
+  // Fetch elo immediately so we can set entry_elo
+  const eloData = await fetchPlayerData(name, tag, region);
+  if (!eloData) return res.status(404).json({ error: 'Player not found on Riot servers' });
+
+  await db.addPlayer(name, tag, region);
+  await db.setEloCache(key, eloData, eloData.updatedAt);
+
+  // Compute absolute LP for entry elo
+  if (eloData.soloEntry) {
+    const TIER_LP_BASE = { IRON:0,BRONZE:400,SILVER:800,GOLD:1200,PLATINUM:1600,EMERALD:2000,DIAMOND:2400 };
+    const DIV_LP = { IV:0,III:100,II:200,I:300 };
+    const APEX = new Set(['MASTER','GRANDMASTER','CHALLENGER']);
+    const s = eloData.soloEntry;
+    const absLp = APEX.has(s.tier) ? 2800+(s.leaguePoints||0) : (TIER_LP_BASE[s.tier]||0)+(DIV_LP[s.rank]||0)+(s.leaguePoints||0);
+    await db.setEntryElo(key, absLp);
+  }
+
+  const player = (await db.getPlayers()).find(p => rankingKey(p.name, p.tag, p.region) === key);
+  res.json({ ok: true, player, eloData });
+});
+
+app.delete('/api/ranking/players/:key', requireAuth, async (req, res) => {
+  const key = decodeURIComponent(req.params.key);
+  await db.removePlayer(key);
+  await db.deletePlayerData(key);
+  res.json({ ok: true });
+});
+
+app.put('/api/ranking/notes/:key', requireAuth, async (req, res) => {
+  const key = decodeURIComponent(req.params.key);
+  await db.setNote(key, req.body.text);
+  res.json({ ok: true });
+});
+
+app.put('/api/ranking/goals/:key', requireAuth, async (req, res) => {
+  const key = decodeURIComponent(req.params.key);
+  await db.setGoal(key, req.body.tier, req.body.division);
+  res.json({ ok: true });
 });
 
 // Only listen when running locally (not on Vercel)

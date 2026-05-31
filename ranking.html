@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ranking — StrategyHub</title>
+    <link rel="stylesheet" href="styles.css?v=11" />
+    <link rel="stylesheet" href="ranking.css" />
+  </head>
+  <body>
+    <nav class="top-nav">
+      <div class="nav-brand">StrategyHub</div>
+      <div class="nav-links">
+        <a href="index.html" class="nav-link">Strategy Map</a>
+        <a href="draft.html" class="nav-link">Draft Pick/Ban</a>
+        <a href="champions.html" class="nav-link">Champions</a>
+        <a href="ranking.html" class="nav-link active">Ranking</a>
+      </div>
+    </nav>
+
+    <div class="ranking-page">
+      <div class="add-player-form">
+        <input
+          type="text"
+          id="riotIdInput"
+          placeholder="Name#Tag (e.g. Faker#KR1)"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <select id="regionSelect">
+          <option value="br1">BR</option>
+          <option value="na1">NA</option>
+          <option value="euw1">EUW</option>
+          <option value="eun1">EUNE</option>
+          <option value="kr">KR</option>
+          <option value="la1">LAN</option>
+          <option value="la2">LAS</option>
+          <option value="jp1">JP</option>
+          <option value="oc1">OCE</option>
+          <option value="tr1">TR</option>
+          <option value="ru">RU</option>
+        </select>
+        <button id="addBtn" class="btn-add">Add Player</button>
+      </div>
+
+      <div class="ranking-toolbar">
+        <h2 id="playerCount">Players</h2>
+        <div class="toolbar-right">
+          <button id="refreshBtn" class="btn-refresh">↻ Refresh All</button>
+          <button id="adminBtn" class="btn-admin">🔒 Admin</button>
+        </div>
+      </div>
+
+      <div id="playerList"></div>
+    </div>
+
+    <script src="ranking.js"></script>
+  </body>
+</html>

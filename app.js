@@ -35,9 +35,19 @@
   const toggleTowersBtn = document.getElementById('toggleTowersBtn');
   const toggleMonstersBtn = document.getElementById('toggleMonstersBtn');
 
-  // Data Dragon config
-  const DDRAGON_VERSION = '16.6.1';
-  const DDRAGON_BASE = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}`;
+  // Data Dragon config — version resolved dynamically from server at startup
+  let DDRAGON_VERSION = '16.6.1'; // fallback
+  let DDRAGON_BASE = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}`;
+
+  async function initDDragonVersion() {
+    try {
+      const resp = await fetch('/api/ddragon-version');
+      const { version } = await resp.json();
+      DDRAGON_VERSION = version;
+      DDRAGON_BASE = `https://ddragon.leagueoflegends.com/cdn/${DDRAGON_VERSION}`;
+    } catch { /* keep fallback */ }
+  }
+  const versionReady = initDDragonVersion();
 
   // Validate
   if (typeof fabric === 'undefined') {
@@ -1996,6 +2006,7 @@
 
   async function loadChampions() {
     try {
+      await versionReady;
       const response = await fetch(`${DDRAGON_BASE}/data/en_US/champion.json`);
       const data = await response.json();
       
